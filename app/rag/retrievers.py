@@ -1,4 +1,5 @@
 import os
+import pickle
 from typing import List
 from langchain_core.documents import Document
 from langchain_community.document_loaders import PyMuPDFLoader
@@ -12,6 +13,8 @@ class OmniRetriever:
     def __init__(self, raw_docs_path: str, vector_db_path: str):
         self.raw_docs_path = raw_docs_path
         self.vector_db_path = vector_db_path
+        # 指定 BM25 的本地缓存路径
+        self.bm25_path = f"{vector_db_path}_bm25.pkl"
 
         # 1. 初始化本地 Embedding 模型
         print("⏳ 正在加载 Embedding 模型...")
@@ -61,20 +64,26 @@ class OmniRetriever:
         # BM25 取前 5 个最相关的备用
         self.bm25_retriever.k = 5
 
+        # 将 BM25 检索器序列化保存到本地，实现双路缓存
+        with open(self.bm25_path, 'wb') as f:
+            pickle.dump(self.bm25_retriever, f)
+
         print("✅ 知识库构建完成！")
 
     def load_or_build_index(self):
         """如果本地有缓存就加载，没有就重新构建"""
-        if os.path.exists(self.vector_db_path):
-            print("🚀 加载已存在的 FAISS 索引...")
+        if os.path.exists(self.vector_db_path) and os.path.exists(self.bm25_path):
+            print("🚀 加载已存在的 FAISS 和 BM25 索引...")
             self.vector_store = FAISS.load_local(
                 self.vector_db_path,
                 self.embeddings,
                 allow_dangerous_deserialization=True
             )
-            # 重建 BM25 (工业界通常用 ES 替代)
-            self.ingest_documents()
+            # 加载本地缓存的 BM25，不再重新读取 PDF
+            with open(self.bm25_path, 'rb') as f:
+                self.bm25_retriever = pickle.load(f)
         else:
+            print("⚠️ 索引不完整，正在重新构建...")
             self.ingest_documents()
 
     def retrieve(self, query: str, top_k: int = 4) -> List[Document]:
@@ -91,18 +100,16 @@ class OmniRetriever:
         faiss_docs = faiss_retriever.invoke(query)
 
         # 2. 核心算法：RRF (Reciprocal Rank Fusion)
-        c = 60  # RRF 经典平滑常数
+        c = 60
         fused_scores = {}
         doc_map = {}
 
-        # 融合第一路：BM25 (关键词权重)
         for rank, doc in enumerate(bm25_docs):
-            content_hash = doc.page_content  # 用文本内容做 key 去重
+            content_hash = doc.page_content
             if content_hash not in doc_map:
                 doc_map[content_hash] = doc
             fused_scores[content_hash] = fused_scores.get(content_hash, 0) + 1 / (rank + c)
 
-        # 融合第二路：FAISS (语义权重)
         for rank, doc in enumerate(faiss_docs):
             content_hash = doc.page_content
             if content_hash not in doc_map:
