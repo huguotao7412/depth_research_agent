@@ -1,22 +1,20 @@
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import List, Optional
 from app.agents.graph import build_omni_research_graph
 
-# 创建一个 API 路由器
 router = APIRouter()
-
-# 1. 在内存中全局初始化一次 Agent 状态机，避免每次请求都重新编译
 print("⏳ 正在挂载 LangGraph 智能体引擎...")
 research_agent = build_omni_research_graph()
 
-
-# 2. 定义 API 的请求体结构 (Pydantic Schema)
+# 增加可选的领域配置参数
 class ResearchRequest(BaseModel):
     query: str
+    domain: Optional[str] = Field(default="通用学术领域", description="研究领域")
+    glossary: Optional[List[str]] = Field(default=[], description="核心术语列表")
+    raw_docs_path: Optional[str] = Field(default="data/raw_docs", description="PDF存放路径")
+    vector_db_path: Optional[str] = Field(default="data/vector_db/faiss_index", description="索引存放路径")
 
-
-# 3. 定义 API 的响应体结构
 class ResearchResponse(BaseModel):
     status: str
     final_report: str
@@ -24,17 +22,19 @@ class ResearchResponse(BaseModel):
     retrieved_docs_count: int
     feedback_log: str
 
-
 @router.post("/research", response_model=ResearchResponse, summary="提交深度研究任务")
 async def run_research(request: ResearchRequest):
-    """
-    接收用户的研究问题，触发多智能体 RAG 工作流，返回最终报告。
-    """
     try:
-        inputs = {"query": request.query}
-
-        # 使用 .invoke() 同步执行整个图的流转，直到到达 END 节点
-        # 注意：在真实的长时间执行场景下，这里可以改成异步或者流式输出(Streaming)
+        # 将传入的参数组装并传递给初始 State
+        inputs = {
+            "query": request.query,
+            "domain_config": {
+                "domain": request.domain,
+                "glossary": request.glossary,
+                "raw_docs_path": request.raw_docs_path,
+                "vector_db_path": request.vector_db_path
+            }
+        }
         final_state = research_agent.invoke(inputs)
 
         return ResearchResponse(
@@ -44,6 +44,5 @@ async def run_research(request: ResearchRequest):
             retrieved_docs_count=len(final_state.get("documents", [])),
             feedback_log=final_state.get("review_feedback", "")
         )
-
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Agent 执行出错: {str(e)}")

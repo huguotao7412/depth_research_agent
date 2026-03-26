@@ -30,13 +30,21 @@ class ReviewerOutput(BaseModel):
 def domain_configurator(state: AgentState) -> Dict[str, Any]:
     """加载目标领域的术语库和数据库配置"""
     print("--- 节点: Domain_Configurator (加载领域配置) ---")
-    mock_config = {
-        "domain": "毫米波雷达生理监测与血压预测",
-        "raw_docs_path": "data/raw_docs",  # 动态传入原始文档路径
-        "vector_db_path": "data/vector_db/faiss_index",  # 动态传入索引路径
-        "glossary": ["FMCW", "微多普勒效应", "脉搏波传导速度(PWV)", "特征提取"]
+
+    # 直接获取上游 (API) 传入的配置，如果没传则给个底层的 fallback
+    config = state.get("domain_config", {})
+
+    dynamic_config = {
+        "domain": config.get("domain", "通用学术领域"),
+        "raw_docs_path": config.get("raw_docs_path", "data/raw_docs"),
+        "vector_db_path": config.get("vector_db_path", "data/vector_db/faiss_index"),
+        "glossary": config.get("glossary", [])
     }
-    return {"domain_config": mock_config, "retrieval_retries": 0, "documents": []}
+
+    # 打印出来确认当前加载的领域
+    print(f"    [当前领域]: {dynamic_config['domain']}")
+
+    return {"domain_config": dynamic_config, "retrieval_retries": 0, "documents": []}
 
 
 def query_analyzer(state: AgentState) -> Dict[str, Any]:
