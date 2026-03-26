@@ -85,6 +85,12 @@ def adaptive_retriever(state: AgentState) -> Dict[str, Any]:
     else:
         print("⚡ 命中内存缓存：直接复用已加载的检索器实例")
         retriever = _retriever_cache[cache_key]
+        # 🚨 修复关键：即使命中了内存缓存中的对象，也要让它自检一下文献是否在硬盘上被更新了
+        if retriever._is_index_outdated():
+            print("🔄 检测到硬盘文献有更新，触发热重载...")
+            retriever.load_or_build_index()
+        else:
+            print("⚡ 命中内存缓存，且文献库未发生改变。")
 
     query = state.get("query", "")
     retrieved_docs = retriever.retrieve(query, top_k=4)
