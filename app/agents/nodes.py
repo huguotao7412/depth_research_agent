@@ -74,16 +74,14 @@ def adaptive_retriever(state: AgentState) -> Dict[str, Any]:
     raw_docs_path = domain_config.get("raw_docs_path", "data/raw_docs")
     vector_db_path = domain_config.get("vector_db_path", "data/vector_db/faiss_index")
 
-    # 【核心升级】引入内存缓存机制：防止 Agent 打回时重复加载
     global _retriever_cache
     cache_key = f"{raw_docs_path}_{vector_db_path}"
 
     if cache_key not in _retriever_cache:
         retriever = OmniRetriever(raw_docs_path=raw_docs_path, vector_db_path=vector_db_path)
-        retriever.load_or_build_index()  # 提前执行索引检查/加载
+        retriever.load_or_build_index()
         _retriever_cache[cache_key] = retriever
     else:
-        print("⚡ 命中内存缓存：直接复用已加载的检索器实例")
         retriever = _retriever_cache[cache_key]
         # 🚨 修复关键：即使命中了内存缓存中的对象，也要让它自检一下文献是否在硬盘上被更新了
         if retriever._is_index_outdated():
