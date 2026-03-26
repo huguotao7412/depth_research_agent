@@ -70,6 +70,27 @@ class OmniRetriever:
 
         print("✅ 知识库构建完成！")
 
+    def _is_index_outdated(self) -> bool:
+        """检测索引是否缺失，或者原始文献是否有更新"""
+        if not os.path.exists(self.vector_db_path) or not os.path.exists(self.bm25_path):
+            return True  # 索引完全不存在
+
+        faiss_index_file = os.path.join(self.vector_db_path, "index.faiss")
+        if not os.path.exists(faiss_index_file):
+            return True
+
+        # 获取当前索引的最后生成时间
+        index_mtime = os.path.getmtime(faiss_index_file)
+
+        # 检查 raw_docs_path 下是否有任何 PDF 文件的修改时间晚于索引生成时间
+        if os.path.exists(self.raw_docs_path):
+            for file in os.listdir(self.raw_docs_path):
+                if file.endswith('.pdf'):
+                    pdf_path = os.path.join(self.raw_docs_path, file)
+                    if os.path.getmtime(pdf_path) > index_mtime:
+                        return True  # 发现更新的 PDF，判定为索引已过期
+        return False
+
     def load_or_build_index(self):
         """如果本地有缓存就加载，没有就重新构建"""
         if os.path.exists(self.vector_db_path) and os.path.exists(self.bm25_path):
