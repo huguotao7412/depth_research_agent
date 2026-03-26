@@ -37,8 +37,8 @@ depth_research_agent/
 ### 1. 克隆项目与安装依赖
 首先，将代码克隆到本地并进入项目目录：
 ```bash
-git clone [https://github.com/您的用户名/OmniResearch-Agent.git](https://github.com/您的用户名/OmniResearch-Agent.git)
-cd OmniResearch-Agent
+git clone [https://github.com/huguotao7412/depth_research_agent](https://github.com/huguotao7412/depth_research_agent)
+cd depth_research_agent
 # 创建并激活虚拟环境 (Windows)
 python -m venv .venv
 .venv\Scripts\activate
