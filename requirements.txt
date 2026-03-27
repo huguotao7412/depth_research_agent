@@ -3,18 +3,20 @@ langchain>=0.1.0
 langgraph>=0.0.20
 fastapi>=0.100.0
 uvicorn>=0.23.0
+streamlit>=1.30.0
 
 # --- 检索与向量组件 (RAG & Embeddings) ---
 langchain-community
+langchain-openai         # 用于接入 DeepSeek 等大语言模型
 langchain-huggingface    # 用于接入 BGE 等本地开源 Embedding 模型
 faiss-cpu                # 跑语义检索的基础向量库 (如果设备支持可换 faiss-gpu)
 rank_bm25                # 传统基于词频的检索，配合 FAISS 做混合检索
-sentence-transformers    # 本地跑 Cross-Encoder 重排序必带
-magic-pdf[full]>=0.6.0  # MinerU 核心库
-langchain-text-splitters # 确保已安装，用于 Markdown 切分
+langchain-text-splitters # 确保已安装，用于 Markdown 结构化切分
 
 # --- 数据处理与外部接入 ---
-pypdf                    # 用于解析本地 PDF 论文文献
+pypdf                    # LangChain 备用 PDF 解析
+pymupdf                  # 提供 PyMuPDFLoader, 用于快速抽样 PDF 前两页进行领域嗅探
+requests                 # 用于 Streamlit 前后端通信及 Kimi API 调用
 python-dotenv            # 加载 .env 里的 API Keys 和路径配置
 
 # --- 评测与可观测性 ---
