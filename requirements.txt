@@ -10,6 +10,8 @@ langchain-huggingface    # 用于接入 BGE 等本地开源 Embedding 模型
 faiss-cpu                # 跑语义检索的基础向量库 (如果设备支持可换 faiss-gpu)
 rank_bm25                # 传统基于词频的检索，配合 FAISS 做混合检索
 sentence-transformers    # 本地跑 Cross-Encoder 重排序必带
+magic-pdf[full]>=0.6.0  # MinerU 核心库
+langchain-text-splitters # 确保已安装，用于 Markdown 切分
 
 # --- 数据处理与外部接入 ---
 pypdf                    # 用于解析本地 PDF 论文文献
