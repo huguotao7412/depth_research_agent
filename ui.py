@@ -13,6 +13,7 @@ API_URL = "http://127.0.0.1:8000/api/v1/research"
 # 确保文献目录存在
 os.makedirs(DOCS_DIR, exist_ok=True)
 
+
 # --- 页面基础配置 ---
 st.set_page_config(
     page_title="depth research agent",

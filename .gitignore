@@ -5,13 +5,17 @@ __pycache__/
 *.so
 
 # === 虚拟环境 ===
+
+
 .venv/
 venv/
 ENV/
 env/
 
+
 # === 环境变量配置 (绝对不能上传!!!) ===
 .env
+
 
 # === IDE 配置 (PyCharm/VSCode) ===
 .idea/

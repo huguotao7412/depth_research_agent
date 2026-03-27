@@ -1,8 +1,8 @@
+from dotenv import load_dotenv
+load_dotenv()
 import os
 os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"  # 【关键修复】防止底层 C++ 库冲突导致闪退
 
-from dotenv import load_dotenv
-load_dotenv()
 import uvicorn
 
 # 2. 导入刚刚写好的 app 工厂函数
