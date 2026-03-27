@@ -5,17 +5,18 @@ fastapi>=0.100.0
 uvicorn>=0.23.0
 streamlit>=1.30.0
 
-# --- 检索与向量组件 (RAG & Embeddings) ---
+# --- 检索与多向量组件 (RAG & Multi-Vector) ---
 langchain-community
-langchain-openai         # 用于接入 DeepSeek 等大语言模型
+langchain-classic        # LangChain 1.0+ 经典组件包（包含 MultiVectorRetriever 等）
+langchain-openai         # [关键] 用于接入 DeepSeek 生成表格/图片摘要
 langchain-huggingface    # 用于接入 BGE 等本地开源 Embedding 模型
-faiss-cpu                # 跑语义检索的基础向量库 (如果设备支持可换 faiss-gpu)
+faiss-cpu                # 语义检索的基础向量库
 rank_bm25                # 传统基于词频的检索，配合 FAISS 做混合检索
-langchain-text-splitters # 确保已安装，用于 Markdown 结构化切分
+langchain-text-splitters # 用于 Markdown 结构化切分
 
 # --- 数据处理与外部接入 ---
 pypdf                    # LangChain 备用 PDF 解析
-pymupdf                  # 提供 PyMuPDFLoader, 用于快速抽样 PDF 前两页进行领域嗅探
+pymupdf                  # [关键] 提供 PyMuPDFLoader, 用于快速抽样 PDF 首页进行领域嗅探
 requests                 # 用于 Streamlit 前后端通信及 Kimi API 调用
 python-dotenv            # 加载 .env 里的 API Keys 和路径配置
 
