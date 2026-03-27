@@ -149,9 +149,30 @@ class OmniRetriever:
             self.multi_retriever = MultiVectorRetriever(vectorstore=self.vector_store, byte_store=self.byte_store,
                                                         id_key=self.id_key)
 
+    # ================= 新增：HyDE 假设性文档生成器 =================
+    def _generate_hyde_document(self, query: str) -> str:
+        """调用 LLM 生成假设性学术回答，用于跨越语义鸿沟"""
+        prompt = ChatPromptTemplate.from_template(
+            "你是一个资深的学术专家。请针对下面的【检索问题】，写一段简短的学术回答（约100-200字）。\n\n"
+            "⚠️ 严格要求：\n"
+            "1. 你不需要保证内容的绝对事实正确性，但请务必在回答中尽可能多地堆叠该领域相关的【专业术语】、【常用指标】、【算法简称】或【核心概念】。\n"
+            "2. 不要包含任何寒暄或解释性的话语（如“这个问题指的是...”），直接输出学术段落本体，这段文本将直接送入向量数据库进行匹配。\n\n"
+            "检索问题: {query}\n\n"
+            "假设性学术回答:"
+        )
+        try:
+            chain = prompt | self.llm | StrOutputParser()
+            # 极速生成，消耗极低 Token
+            hyde_doc = chain.invoke({"query": query}).strip()
+            return hyde_doc
+        except Exception as e:
+            print(f"    [⚠️ HyDE 生成失败]: {e}，回退使用原始 query。")
+            return query
+
+    # =========================================================
+
     def _compress_document(self, query: str, doc: Document) -> Document | None:
         """使用 LLM 动态抽取长文档中与当前查询真正相关的核心信息"""
-        # 如果文本很短，不需要浪费 Token 压缩，直接返回
         if len(doc.page_content) < 300:
             return doc
 
@@ -165,16 +186,11 @@ class OmniRetriever:
             "参考文档片段：\n{context}"
         )
 
-        # 为了防止撑爆上下文，送入压缩大模型前最多截断到前 4000 字符
         chain = prompt | self.llm | StrOutputParser()
         try:
             summary = chain.invoke({"query": query, "context": doc.page_content[:4000]}).strip()
-
-            # 如果大模型判定无关，返回 None 以丢弃该文档
             if summary.upper().startswith("NONE") or summary == "NONE":
                 return None
-
-            # 组装压缩后的新文档，原封不动保留来源元数据
             compressed_content = f"[基于大模型信息提炼] {summary}"
             return Document(page_content=compressed_content, metadata=doc.metadata)
 
@@ -186,9 +202,13 @@ class OmniRetriever:
         if self.multi_retriever is None:
             self.load_or_build_index()
 
-        # ==================== 核心修复 ====================
-        # 手动执行 FAISS 检索并解码 byte_store，绕过 MultiVectorRetriever 的强制 JSON 解析
-        faiss_sub_docs = self.vector_store.similarity_search(query)
+        # --- 1. 触发 HyDE 机制 ---
+        print(f"    [🧠 触发 HyDE]: 正在为 '{query}' 实时生成假设性学术回答以增强语义检索...")
+        hypothetical_doc = self._generate_hyde_document(query)
+        # print(f"    [HyDE 内容]: {hypothetical_doc[:50]}...") # 调试时可解开注释看假答案长什么样
+
+        # --- 2. FAISS 语义检索 (注入 HyDE 假设性文档) ---
+        faiss_sub_docs = self.vector_store.similarity_search(hypothetical_doc)
         faiss_docs = []
         for d in faiss_sub_docs:
             doc_id = d.metadata.get(self.id_key)
@@ -200,8 +220,8 @@ class OmniRetriever:
                     faiss_docs.append(d)
             else:
                 faiss_docs.append(d)
-        # =================================================
 
+        # --- 3. BM25 关键词检索 (保留原始短 query 防止噪音) ---
         bm25_docs = self.bm25_retriever.invoke(query)
         mapped_bm25 = []
         for d in bm25_docs:
@@ -215,7 +235,7 @@ class OmniRetriever:
             else:
                 mapped_bm25.append(d)
 
-        # RRF 融合打分
+        # --- 4. RRF 融合打分 ---
         c = 60
         scores = {}
         doc_map = {}
@@ -228,16 +248,15 @@ class OmniRetriever:
             doc_map[h] = d
             scores[h] = scores.get(h, 0) + 1 / (rank + c)
 
-        # 截取融合后排名最高的 Top K 篇“原始长文档”
         sorted_res = sorted(scores.items(), key=lambda x: x[1], reverse=True)
         raw_top_docs = [doc_map[content] for content, score in sorted_res[:top_k]]
 
-        # --- 并行 LLM 压缩与二次过滤 (保留在底层处理) ---
-        print(f"🔍 针对子问题 '{query}'，召回 {len(raw_top_docs)} 段长文本，正在进行 LLM 并行压缩与提纯...")
+        # --- 5. 并行 LLM 压缩与二次过滤 ---
+        print(f"    [🔍 过滤提纯]: 召回 {len(raw_top_docs)} 段长文本，正在多线程提取核心证据...")
         compressed_docs = []
 
-        # 使用多线程加速处理
         with concurrent.futures.ThreadPoolExecutor(max_workers=min(top_k, 4)) as executor:
+            # 注意：向压缩大模型传入的还是真实的 query，而不是假答案
             future_to_doc = {executor.submit(self._compress_document, query, doc): doc for doc in raw_top_docs}
 
             for future in concurrent.futures.as_completed(future_to_doc):
@@ -245,5 +264,5 @@ class OmniRetriever:
                 if comp_doc is not None:
                     compressed_docs.append(comp_doc)
 
-        print(f"✨ 提纯完成，有效保留 {len(compressed_docs)} 段高价值压缩证据。")
+        print(f"    [✨ 提纯完成]: 针对 '{query}' 有效保留了 {len(compressed_docs)} 段核心证据。")
         return compressed_docs

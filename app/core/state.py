@@ -18,6 +18,8 @@ class AgentState(TypedDict):
     # 3. 意图拆解后的子问题列表 (由 Query_Analyzer 生成)
     sub_questions: List[str]
 
+    search_queries: List[str]
+
     # 4. 检索到的文献上下文 (由 Adaptive_Retriever 执行 Agentic RAG)
     # 使用 operator.add 意味着后续步骤如果触发重新检索，新的 context 会被追加而不是覆盖
     documents: Annotated[List[Dict[str, Any]], operator.add]
