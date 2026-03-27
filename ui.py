@@ -2,38 +2,60 @@ import streamlit as st
 import os
 import shutil
 import requests
+import json
 import time
 
 # --- 全局后台配置 (需与 main.py 保持一致) ---
 DOCS_DIR = os.path.join("data", "raw_docs")
 INDEX_DIR = os.path.join("data", "vector_db", "faiss_index")
-# FastAPI 后端接口地址
-API_URL = "http://127.0.0.1:8000/api/v1/research"
+# FastAPI 后端流式接口地址 (请确保与后端的路由设计一致)
+STREAM_API_URL = "http://127.0.0.1:8000/api/v1/research/stream"
 
 # 确保文献目录存在
 os.makedirs(DOCS_DIR, exist_ok=True)
 
-
 # --- 页面基础配置 ---
 st.set_page_config(
-    page_title="depth research agent",
+    page_title="Depth Research Agent",
     page_icon="🔬",
-    layout="wide",  # 使用宽屏模式，更适合学术阅读
-    initial_sidebar_state="expanded"  # 默认展开侧边栏
+    layout="wide",  # 宽屏模式
+    initial_sidebar_state="expanded"
 )
 
-# 全局 CSS 样式微调，让字体更适合阅读，界面更紧凑
-# 【已修复】：将 unsafe_allow_warnings 改为 unsafe_allow_html
+# --- 全局 CSS 深度美化 ---
 st.markdown("""
 <style>
-    .stDeployButton {display:none;} /* 隐藏右上角 deploy 按钮 */
-    #MainMenu {visibility: hidden;} /* 隐藏菜单 */
-    footer {visibility: hidden;} /* 隐藏页脚 */
-    /* 调整聊天气泡的字体 */
+    /* 隐藏默认的部署和菜单按钮 */
+    .stDeployButton {display:none;}
+    #MainMenu {visibility: hidden;}
+    footer {visibility: hidden;}
+
+    /* 调整聊天气泡字体，增强学术阅读体验 */
     .st-emotion-cache-1c7y2kd p, .st-emotion-cache-zt5idj p {
-        font-family: 'Inter', "Source Sans Pro", sans-serif;
+        font-family: 'Inter', "Source Sans Pro", "PingFang SC", sans-serif;
         font-size: 1.05rem;
         line-height: 1.6;
+    }
+
+    /* 修复侧边栏文件列表的对齐问题：移除按钮自带的冗余边距 */
+    .stButton > button {
+        padding: 0px 8px !important;
+        margin-top: 0px !important;
+        min-height: 32px !important;
+        border: none;
+        background-color: transparent;
+    }
+    .stButton > button:hover {
+        background-color: #ff4b4b20;
+        border-radius: 4px;
+    }
+
+    /* 调整 Markdown 容器底部边距，使其与按钮水平居中 */
+    .file-name-text {
+        margin-bottom: 0px;
+        padding-top: 4px;
+        font-size: 0.9rem;
+        color: #e0e0e0;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -50,147 +72,155 @@ def clear_index_cache():
 
 
 # --- 界面标题区域 ---
-st.title("🔬 depth research agent")
-st.caption("您的解耦式、可插拔通用深度研究智能体引擎")
+st.title("🔬 Depth Research Agent")
+st.caption("您的解耦式、可插拔通用深度研究智能体引擎 (支持全网联邦检索)")
 st.divider()
 
-# --- 侧边栏：简洁版文献库管理 ---
+# --- 侧边栏：干净整洁的文献库管理 ---
 with st.sidebar:
-    st.header("📚 本地文献库")
-    st.markdown("管理您用于构建知识库的 PDF 学术文献。")
+    st.header("📚 本地知识核心")
+    st.markdown("上传或管理您的专属 PDF 学术文献。")
 
-    # 1. 上传文件组件 (支持多文件)
+    # 1. 上传文件组件
     uploaded_files = st.file_uploader(
-        "添加 PDF 文献",
+        "➕ 挂载新文献",
         type=["pdf"],
         accept_multiple_files=True,
-        help="上传新的 PDF 论文或报告，系统将自动解析并建立索引。"
+        help="上传新的 PDF 论文或报告，系统将在下一次查询时自动解析建库。"
     )
 
     if uploaded_files:
-        with st.spinner("正在上传文献并清理旧缓存..."):
+        with st.spinner("正在写入硬盘并清理旧索引..."):
             for file in uploaded_files:
                 file_path = os.path.join(DOCS_DIR, file.name)
-                # 只有文件不存在时才保存，防止重复上传带来的缓存问题
                 if not os.path.exists(file_path):
                     with open(file_path, "wb") as f:
                         f.write(file.getbuffer())
-            # 上传新文件必须清理向量索引缓存
             clear_index_cache()
-        st.success(f"成功上传 {len(uploaded_files)} 篇文献！下一次提问将自动重建索引。")
-        time.sleep(1)  # 稍微等待让用户看清提示
-        st.rerun()  # 强制刷新界面
+        st.success(f"✅ 成功挂载 {len(uploaded_files)} 篇文献！")
+        time.sleep(1)
+        st.rerun()
 
     st.divider()
 
-    # 2. 已有文献列表与删除
-    st.subheader("当前文献列表")
+    # 2. 已有文献列表与对齐修复
+    st.subheader("当前已挂载文献")
     current_files = [f for f in os.listdir(DOCS_DIR) if f.endswith(".pdf")]
 
     if not current_files:
-        st.info("文献库当前为空。请上传 PDF 文件以开始。")
+        st.info("文献库当前为空。")
     else:
-        # 使用 st.expander 将列表收纳，保持侧边栏简洁
-        with st.expander(f"查看详情 (共 {len(current_files)} 篇)", expanded=True):
+        with st.expander(f"查看文献目录 (共 {len(current_files)} 篇)", expanded=True):
             for file in current_files:
-                col1, col2 = st.columns([7, 1])
-                # 截断过长的文件名以保持对齐
-                display_name = file if len(file) < 30 else file[:27] + "..."
-                col1.markdown(f"📄 `{display_name}`")
+                # 使用 vertical_alignment 强行让文字和按钮在一条水平线上
+                col1, col2 = st.columns([0.85, 0.15], vertical_alignment="center")
 
-                # 删除按钮
-                if col2.button("🗑️", key=f"del_{file}", help=f"从知识库中移除 {file}"):
+                display_name = file if len(file) < 26 else file[:23] + "..."
+                col1.markdown(f"<div class='file-name-text'>📄 {display_name}</div>", unsafe_allow_html=True)
+
+                if col2.button("🗑️", key=f"del_{file}", help=f"删除 {file}"):
                     try:
                         os.remove(os.path.join(DOCS_DIR, file))
-                        # 删除文件也必须清理向量索引缓存
                         clear_index_cache()
-                        st.warning(f"已移除 {file}")
-                        time.sleep(1)
                         st.rerun()
                     except Exception as e:
-                        st.error(f"移除文件失败: {str(e)}")
+                        st.error(f"删除失败: {str(e)}")
 
-# --- 主体区域：干净的聊天交互界面 ---
+# --- 主体区域：沉浸式聊天交互界面 ---
 
-# 1. 初始化会话状态 (聊天历史)
 if "chat_history" not in st.session_state:
     st.session_state.chat_history = [
         {"role": "assistant",
-         "content": "您好！我是 **depth research agent**。请在左侧文献库中添加研究材料，然后向我提交您的深度研究问题。"}
+         "content": "您好！我是 **Depth Research Agent**。我已经准备好在您的本地文献和广阔的互联网中寻找答案了。请输入您的研究问题。"}
     ]
 
-# 2. 渲染历史对话 (Markdown 格式)
+# 渲染历史对话
 for msg in st.session_state.chat_history:
     with st.chat_message(msg["role"]):
-        # 【已修复】：将 unsafe_allow_warnings 改为 unsafe_allow_html
         st.markdown(msg["content"], unsafe_allow_html=True)
 
-# 3. 接收用户输入问题
-if user_input := st.chat_input("在此输入您的研究问题..."):
-    # 显示用户问题
+# 接收用户输入问题
+if user_input := st.chat_input("在此输入您的研究问题"):
+
     st.session_state.chat_history.append({"role": "user", "content": user_input})
     with st.chat_message("user"):
         st.markdown(user_input)
 
-    # 4. 呼叫后端 Agent API 并展示动态效果
     with st.chat_message("assistant"):
-        # 学术风的 Spinner
-        with st.spinner("**depth research agent** 正在为您进行多智能体协作研究... (可能需要几分钟，请耐心等待)"):
+        # 使用流式状态盒替代死板的 Spinner
+        with st.status("🧠 深度研究智能体已启动，正在规划工作流...", expanded=True) as status_box:
+
+            payload = {"query": user_input}
+            final_report = ""
+            start_time = time.time()
+
             try:
-                start_time = time.time()
-                # 发送 POST 请求给 FastAPI 后端
-                response = requests.post(API_URL, json={"query": user_input}, timeout=None)
-                end_time = time.time()
+                # 开启 stream=True 进行流式接收
+                response = requests.post(STREAM_API_URL, json=payload, stream=True)
+                response.raise_for_status()
 
-                if response.status_code == 200:
-                    data = response.json()
+                for line in response.iter_lines():
+                    if line:
+                        decoded_line = line.decode('utf-8')
+                        if decoded_line.startswith("data: "):
+                            data_str = decoded_line[6:]
 
-                    # --- 极简输出逻辑 (技术细节折叠) ---
-                    sub_questions = data.get("sub_questions", [])
-                    docs_count = data.get("retrieved_docs_count", 0)
-                    feedback = data.get("feedback_log", "未记录")
-                    report_body = data.get("final_report", "报告生成失败。")
+                            if data_str == "[DONE]":
+                                end_time = time.time()
+                                status_box.update(label=f"✅ 研究完成！总耗时: {end_time - start_time:.1f}s",
+                                                  state="complete", expanded=False)
+                                break
 
-                    # 1. 成功召回简报 (第一行)
-                    brief_summary = f"✅ 研究完成。耗时: `{end_time - start_time:.1f}s`。参考了本地库中 **{docs_count}** 个高相关性文献片段。"
-                    st.markdown(brief_summary)
+                            try:
+                                event = json.loads(data_str)
+                                if "error" in event:
+                                    st.error(f"❌ 后端执行出错: {event['error']}")
+                                    status_box.update(label="任务失败", state="error")
+                                    break
 
-                    # 2. 将中间所有技术细节折叠起来，保持界面简洁
-                    with st.expander("查看 Agent 思考路径与学术评审反馈", expanded=False):
-                        st.markdown("**🧠 意图拆解与子问题：**")
-                        if sub_questions:
-                            for q in sub_questions:
-                                st.write(f"- {q}")
-                        else:
-                            st.write("- (未记录子问题)")
+                                node = event.get("node")
+                                state = event.get("state_update", {})
 
-                        st.divider()
-                        st.markdown(f"**⚖️ 同行评审反馈信号：**\n`{feedback}`")
+                                # ===== 动态更新前端心跳日志 =====
+                                if node == "Domain_Configurator":
+                                    st.write("✅ **[知识预载]** 领域配置与术语库就绪。")
+                                elif node == "Query_Analyzer":
+                                    subs = state.get('sub_questions', [])
+                                    st.write(f"🔍 **[意图拆解]** 剥离出 {len(subs)} 个子检索策略...")
+                                elif node == "Adaptive_Retriever":
+                                    docs = state.get("documents", [])
+                                    st.write(f"📖 **[底层检索]** 从向量库中萃取了 {len(docs)} 条核心事实证据。")
+                                elif node == "Peer_Reviewer":
+                                    feedback = state.get("review_feedback", "")
+                                    if "APPROVED" in feedback:
+                                        st.write("⚖️ **[同行评审]** 证据链路完整，逻辑自洽，审查通过！")
+                                    else:
+                                        new_q = state.get("search_queries", [])
+                                        st.write("⚠️ **[抗幻觉审查]** 发现现有证据无法支撑结论，已打回重审。")
+                                        st.write(f"💡 **[自我反思]** 提取新搜索线索: `{', '.join(new_q)}`")
+                                elif node == "External_Search":
+                                    st.write("🌐 **[突破边界]** 触发旁路救援，正在呼叫大网模型进行全网增量检索...")
+                                elif node == "Report_Compiler":
+                                    st.write("📝 **[知识融合]** 正在汇总合规证据，撰写最终深度报告...")
+                                    final_report = state.get("final_report", "")
 
-                    # 3. 渲染最关键的 Markdown 报告主体
-                    st.divider()
-                    st.markdown(report_body)
-
-                    # 将完整的简洁版回答存入历史记录
-                    st.session_state.chat_history.append({
-                        "role": "assistant",
-                        "content": f"{brief_summary}\n\n---\n\n{report_body}"
-                    })
-
-                else:
-                    error_detail = f"**后端 API 报错 (状态码: {response.status_code})**\n\n错误信息: `{response.text}`"
-                    st.error(error_detail)
-                    st.session_state.chat_history.append({"role": "assistant", "content": error_detail})
+                            except json.JSONDecodeError:
+                                continue
 
             except requests.exceptions.ConnectionError:
-                error_msg = "⚠️ **无法连接到后端服务器！** 请确保您的后端引擎 (`main.py`) 已在另一个终端成功启动并运行在 8000 端口。"
+                error_msg = "⚠️ **无法连接到后端引擎！** 请检查 `main.py` 是否运行在 8000 端口。"
+                status_box.update(label="网络异常", state="error")
                 st.error(error_msg)
-                st.session_state.chat_history.append({"role": "assistant", "content": error_msg})
-            except requests.exceptions.Timeout:
-                error_msg = "⏱️ **请求超时。** 您的研究问题可能需要极长时间或本地文献过于庞大。请检查后端状态。"
-                st.error(error_msg)
-                st.session_state.chat_history.append({"role": "assistant", "content": error_msg})
             except Exception as e:
-                error_msg = f"发生未知错误: {str(e)}"
-                st.error(error_msg)
-                st.session_state.chat_history.append({"role": "assistant", "content": error_msg})
+                status_box.update(label="执行异常", state="error")
+                st.error(f"发生未知错误: {str(e)}")
+
+        # 状态框结束后，优雅地渲染最终的大模型 Markdown 报告
+        if final_report:
+            st.markdown(final_report)
+
+            # 持久化保存到聊天记录中
+            st.session_state.chat_history.append({
+                "role": "assistant",
+                "content": final_report
+            })

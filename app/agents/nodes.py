@@ -5,12 +5,13 @@ from pydantic import BaseModel, Field
 from langchain_openai import ChatOpenAI
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_community.document_loaders import PyMuPDFLoader
+from langchain_community.tools.tavily_search import TavilySearchResults
 from app.core.state import AgentState
 from app.core.prompts import QUERY_ANALYZER_PROMPT, PEER_REVIEWER_PROMPT
 from app.rag.retrievers import OmniRetriever
 from dotenv import load_dotenv
-
 load_dotenv()
+
 _retriever_cache = {}
 
 # --- 1. 初始化 LLM ---
@@ -250,3 +251,44 @@ def report_compiler(state: AgentState) -> Dict[str, Any]:
 
     print("    [报告生成完毕！]")
     return {"final_report": final_content}
+
+
+def external_academic_search(state: AgentState) -> Dict[str, Any]:
+    """旁路节点：当本地文献库无法回答时，触发 Tavily 外部 Web 搜索"""
+    print("--- 节点: External_Academic_Search (Tavily 联网检索旁路) ---")
+
+    # 提取评审专家在上一步打回时给出的建议检索词，兜底用原问题
+    queries_to_search = state.get("search_queries", [])
+    if not queries_to_search:
+        queries_to_search = [state.get("query", "")]
+
+    # 初始化 Tavily 搜索工具
+    tavily_tool = TavilySearchResults(max_results=3)
+
+    web_docs = []
+    seen_urls = set()
+
+    for q in queries_to_search:
+        print(f"    [🌐 正在呼叫外援检索]: {q}")
+        try:
+            # 执行全网搜索
+            results = tavily_tool.invoke({"query": q})
+            for res in results:
+                url = res.get("url", "未知网页")
+                content = res.get("content", "")
+
+                if url not in seen_urls and content:
+                    seen_urls.add(url)
+                    # 强行打上 Web 标签，让大模型在写报告时明确标出 (来源: [Web] URL)
+                    web_docs.append({
+                        "source": f"[Web] {url}",
+                        "content": f"[外部联网补充信息] {content}"
+                    })
+        except Exception as e:
+            print(f"    [⚠️ Tavily 检索异常]: {e}")
+
+    print(f"    [外援到达]: 从互联网成功补充了 {len(web_docs)} 条外部高价值参考信息。")
+
+    # 因为 state.py 中的 documents 标注了 operator.add
+    # 这里返回的 web_docs 会被无缝追加到之前本地检索的文档列表中，不会覆盖！
+    return {"documents": web_docs}
