@@ -24,6 +24,7 @@ env/
 # === 本地知识库与缓存数据 ===
 data/vector_db/
 data/raw_docs/
+data/raw_docs_parsed/
 *.pdf
 
 # 忽略临时测试脚本产生的垃圾文件
