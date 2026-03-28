@@ -76,13 +76,36 @@ class OmniRetriever:
             return f"数据表格预览: {' '.join(lines[:3])}"
 
     def ingest_documents(self):
+        # 1. 确保目录一定存在
         if not os.path.exists(self.raw_docs_path):
             os.makedirs(self.raw_docs_path)
-            return
+
+        # 确保向量库的父目录也存在 (防止刚 clone 下来没 data/vector_db 文件夹报错)
+        os.makedirs(os.path.dirname(self.vector_db_path), exist_ok=True)
+
         pdf_files = [f for f in os.listdir(self.raw_docs_path) if f.endswith('.pdf')]
+
+        # 2. 【核心修复】为刚 Clone 项目的新用户初始化一个空库，防止后续检索报 None 错误
         if not pdf_files:
+            print("⚠️ 未检测到 PDF 文件，初始化空知识库待命...")
+            empty_doc = Document(page_content="[知识库当前为空，请挂载文献]",
+                                 metadata={self.id_key: "empty_id", "source": "system"})
+
+            self.vector_store = FAISS.from_documents([empty_doc], self.embeddings)
+            self.vector_store.save_local(self.vector_db_path)
+
+            self.bm25_retriever = BM25Retriever.from_documents([empty_doc])
+            with open(self.bm25_path, 'wb') as f:
+                pickle.dump(self.bm25_retriever, f)
+
+            self.byte_store.mset([("empty_id", "[知识库当前为空，请挂载文献]".encode('utf-8'))])
+            with open(self.kv_store_path, 'wb') as f:
+                pickle.dump(self.byte_store.store, f)
+            print("✅ 空知识库初始化完成！")
             return
 
+        # ================= 下方为你原有的正常解析逻辑 =================
+        print(f"📚 发现 {len(pdf_files)} 篇文献，开始解析建库...")
         vector_docs = []
         store_docs = []
 
@@ -134,20 +157,30 @@ class OmniRetriever:
         return False
 
     def load_or_build_index(self):
-        if not self._is_index_outdated():
-            print("🚀 正在从硬盘加载多向量索引...")
-            self.vector_store = FAISS.load_local(self.vector_db_path, self.embeddings,
-                                                 allow_dangerous_deserialization=True)
-            with open(self.bm25_path, 'rb') as f:
-                self.bm25_retriever = pickle.load(f)
-            with open(self.kv_store_path, 'rb') as f:
-                self.byte_store.store = pickle.load(f)
-            self.multi_retriever = MultiVectorRetriever(vectorstore=self.vector_store, byte_store=self.byte_store,
-                                                        id_key=self.id_key)
-        else:
+        # 如果索引过期或者不存在（比如刚 clone 下来的新用户）
+        if self._is_index_outdated():
+            print("🔄 索引不存在或已过期，触发知识库构建...")
             self.ingest_documents()
-            self.multi_retriever = MultiVectorRetriever(vectorstore=self.vector_store, byte_store=self.byte_store,
-                                                        id_key=self.id_key)
+        else:
+            print("🚀 正在从硬盘加载多向量索引...")
+            try:
+                self.vector_store = FAISS.load_local(self.vector_db_path, self.embeddings,
+                                                     allow_dangerous_deserialization=True)
+                with open(self.bm25_path, 'rb') as f:
+                    self.bm25_retriever = pickle.load(f)
+                with open(self.kv_store_path, 'rb') as f:
+                    self.byte_store.store = pickle.load(f)
+            except Exception as e:
+                print(f"⚠️ 硬盘索引加载失败 (可能已损坏): {e}，尝试强制重建...")
+                self.ingest_documents()
+
+        # 无论如何，最后一定要挂载 multi_retriever
+        if self.vector_store is not None:
+            self.multi_retriever = MultiVectorRetriever(
+                vectorstore=self.vector_store,
+                byte_store=self.byte_store,
+                id_key=self.id_key
+            )
 
     # ================= 新增：HyDE 假设性文档生成器 =================
     def _generate_hyde_document(self, query: str) -> str:

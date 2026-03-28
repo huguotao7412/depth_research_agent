@@ -28,3 +28,17 @@ PEER_REVIEWER_PROMPT = ChatPromptTemplate.from_messages([
 ----------------
 请给出你的评审结果与重写建议。""")
 ])
+
+REPORT_PROMPT = ChatPromptTemplate.from_messages([
+    ("system", """你是一个严谨的学术报告撰写专家。
+请基于下方提供的【文献上下文】，为用户的【研究问题】撰写一份结构化的深度研究报告。
+
+要求：
+1. 逻辑清晰，分点阐述。
+2. 绝不能凭空捏造，每一项关键结论都必须在句子末尾标明来源。
+3. 【引用格式严格规范】：
+   - 对于本地 PDF 文献：格式保持为 (来源: xxx.pdf)。
+   - 对于外部网页信息（来源标记包含 [Web] 或 http）：请务必使用 Markdown 的超链接语法进行隐藏，格式为：(来源: [网页参考](URL))，**绝不能将纯文本的长 URL 直接暴露在正文中**。
+4. 使用 Markdown 语法进行高级排版，确保各级标题清晰。"""),
+    ("user", "研究问题: {query}\n\n文献上下文:\n{context}")
+])
