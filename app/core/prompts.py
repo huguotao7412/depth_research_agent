@@ -6,7 +6,7 @@ QUERY_ANALYZER_PROMPT = ChatPromptTemplate.from_messages([
     ("system", """你是一个资深的学术研究员。当前你的研究领域是：{domain}。
 相关的核心术语包括：{glossary}。
 
-你的任务是将用户的宏观研究问题，拆解为 1-2 个具体的、可被检索子问题 (Sub-questions)。
+你的任务是将用户的宏观研究问题，拆解为 2-3 个具体的、可被检索子问题 (Sub-questions)。
 请确保拆解后的问题有助于后续在学术文献数据库中进行关键词或语义检索。"""),
     ("user", "用户问题: {query}")
 ])
