@@ -65,15 +65,44 @@ class OmniRetriever:
 
     def _summarize_table(self, table_content: str) -> str:
         time.sleep(0.5)
+
+        def safe_truncate_table(table_str: str, max_len: int = 3500) -> str:
+            if len(table_str) <= max_len:
+                return table_str
+
+            lines = table_str.strip().split('\n')
+            # 如果格式异常，不足2行，回退到普通截断
+            if len(lines) <= 2:
+                return table_str[:max_len]
+
+            # 强制保留前两行：表头 (Header) 和 分隔符 (Separator, 例如 |---|---|)
+            result_lines = [lines[0], lines[1]]
+            current_len = len(lines[0]) + len(lines[1]) + 2
+
+            for line in lines[2:]:
+                if current_len + len(line) + 1 > max_len:
+                    # 当超出长度时，优雅地添加一个省略行，提示大模型表格已截断
+                    col_count = max(1, lines[0].count('|') - 1)
+                    result_lines.append("|" + " ... |" * col_count)
+                    break
+                result_lines.append(line)
+                current_len += len(line) + 1
+
+            return '\n'.join(result_lines)
+
+        # 预处理获取结构完整的安全表格
+        safe_table = safe_truncate_table(table_content)
+
         prompt = ChatPromptTemplate.from_template(
             "总结以下学术表格的核心对比关系或关键结论，直接给出总结文字：\n\n{table}"
         )
         chain = prompt | self.llm | StrOutputParser()
         try:
-            return chain.invoke({"table": table_content[:3500]}).strip()
+            return chain.invoke({"table": safe_table}).strip()
         except Exception as e:
+            # 异常兜底也优化一下，保证返回的预览信息更清晰
             lines = table_content.split('\n')
-            return f"数据表格预览: {' '.join(lines[:3])}"
+            return f"[表格解析异常兜底] 数据表格预览: {' '.join(lines[:3])}..."
 
     def ingest_documents(self):
         # 1. 确保目录一定存在
@@ -268,28 +297,39 @@ class OmniRetriever:
             else:
                 mapped_bm25.append(d)
 
-        # --- 4. RRF 融合打分 ---
+        # --- 4. RRF 融合打分 (修复 Hash 覆盖漏洞) ---
         c = 60
         scores = {}
         doc_map = {}
-        for rank, d in enumerate(mapped_bm25):
-            h = d.page_content
-            doc_map[h] = d
-            scores[h] = scores.get(h, 0) + 1 / (rank + c)
-        for rank, d in enumerate(faiss_docs):
-            h = d.page_content
-            doc_map[h] = d
-            scores[h] = scores.get(h, 0) + 1 / (rank + c)
 
+        # 定义一个辅助函数获取唯一的 document ID
+        def get_unique_id(doc: Document) -> str:
+        # 优先获取入库时生成的 UUID，如果由于某种原因缺失，则使用内容+元数据的混合哈希作为唯一标识
+            doc_id = doc.metadata.get(self.id_key)
+            if doc_id:
+                        return str(doc_id)
+            return str(hash(doc.page_content + doc.metadata.get("source", "unknown")))
+
+        # 计算 BM25 召回得分
+        for rank, d in enumerate(mapped_bm25):
+                    uid = get_unique_id(d)
+                    doc_map[uid] = d
+                    scores[uid] = scores.get(uid, 0) + 1 / (rank + c)
+
+        # 计算 FAISS 语义召回得分
+        for rank, d in enumerate(faiss_docs):
+                    uid = get_unique_id(d)
+                    doc_map[uid] = d
+                    scores[uid] = scores.get(uid, 0) + 1 / (rank + c)
+
+        # 依据 RRF 综合得分倒序排列
         sorted_res = sorted(scores.items(), key=lambda x: x[1], reverse=True)
-        raw_top_docs = [doc_map[content] for content, score in sorted_res[:top_k]]
+        raw_top_docs = [doc_map[uid] for uid, score in sorted_res[:top_k]]
 
         # --- 5. 并行 LLM 压缩与二次过滤 ---
         print(f"    [🔍 过滤提纯]: 召回 {len(raw_top_docs)} 段长文本，正在多线程提取核心证据...")
         compressed_docs = []
-
         with concurrent.futures.ThreadPoolExecutor(max_workers=min(top_k, 4)) as executor:
-            # 注意：向压缩大模型传入的还是真实的 query，而不是假答案
             future_to_doc = {executor.submit(self._compress_document, query, doc): doc for doc in raw_top_docs}
 
             for future in concurrent.futures.as_completed(future_to_doc):
@@ -298,4 +338,11 @@ class OmniRetriever:
                     compressed_docs.append(comp_doc)
 
         print(f"    [✨ 提纯完成]: 针对 '{query}' 有效保留了 {len(compressed_docs)} 段核心证据。")
+
+        if not compressed_docs and raw_top_docs:
+            print(f"    [⚠️ 防断链兜底触发]: 提纯模型认为召回结果均无关。强制保留 RRF 粗排 Top 1 供审查...")
+            fallback_doc = raw_top_docs[0]
+            # 打上特殊标记，截断防超长，让下游 Reviewer 知道这是没经过提纯的次优数据
+            fallback_doc.page_content = f"[提纯阶段判定无关的兜底原始数据] {fallback_doc.page_content[:1500]}..."
+            compressed_docs.append(fallback_doc)
         return compressed_docs

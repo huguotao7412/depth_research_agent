@@ -250,8 +250,13 @@ def external_academic_search(state: AgentState) -> Dict[str, Any]:
     if not queries_to_search:
         queries_to_search = [state.get("query", "")]
 
-    # 初始化 Tavily 搜索工具
-    tavily_tool = TavilySearchResults(max_results=3)
+    # 初始化 Tavily 搜索工具 (需要确保已配置 TAVILY_API_KEY 环境变量)
+    try:
+        from langchain_community.tools.tavily_search import TavilySearchResults
+        tavily_tool = TavilySearchResults(max_results=3)
+    except ImportError:
+        print("    [⚠️ 警告]: 未安装 langchain_community 或缺少 Tavily 相关依赖。")
+        return {"documents": state.get("documents", [])}
 
     web_docs = []
     seen_urls = set()
@@ -277,6 +282,7 @@ def external_academic_search(state: AgentState) -> Dict[str, Any]:
 
     print(f"    [外援到达]: 从互联网成功补充了 {len(web_docs)} 条外部高价值参考信息。")
 
-    # 因为 state.py 中的 documents 标注了 operator.add
-    # 这里返回的 web_docs 会被无缝追加到之前本地检索的文档列表中，不会覆盖！
-    return {"documents": web_docs}
+    existing_docs = state.get("documents", [])
+    combined_docs = existing_docs + web_docs
+
+    return {"documents": combined_docs}
