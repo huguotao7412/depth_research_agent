@@ -1,11 +1,12 @@
 import os
+from langchain_core.messages import HumanMessage
+from protocols.mcp.client import get_mcp_tools_and_client
 import json
 from typing import Dict, Any, List
 from pydantic import BaseModel, Field
 from langchain_openai import ChatOpenAI
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_community.document_loaders import PyMuPDFLoader
-from langchain_community.tools.tavily_search import TavilySearchResults
 from app.core.state import AgentState
 from app.core.prompts import QUERY_ANALYZER_PROMPT, PEER_REVIEWER_PROMPT, REPORT_PROMPT
 from app.rag.retrievers import OmniRetriever
@@ -241,46 +242,61 @@ def report_compiler(state: AgentState) -> Dict[str, Any]:
     return {"final_report": final_content}
 
 
-def external_academic_search(state: AgentState) -> Dict[str, Any]:
-    """旁路节点：当本地文献库无法回答时，触发 Tavily 外部 Web 搜索"""
-    print("--- 节点: External_Academic_Search (Tavily 联网检索旁路) ---")
+async def external_academic_search(state: AgentState) -> Dict[str, Any]:
+    """旁路节点：通过 MCP 接入外部工具 (Tavily & GitHub) 进行补充检索"""
+    print("--- 节点: External_Academic_Search (MCP 动态工具检索旁路) ---")
 
-    # 提取评审专家在上一步打回时给出的建议检索词，兜底用原问题
     queries_to_search = state.get("search_queries", [])
     if not queries_to_search:
         queries_to_search = [state.get("query", "")]
 
-    # 初始化 Tavily 搜索工具 (需要确保已配置 TAVILY_API_KEY 环境变量)
-    try:
-        from langchain_community.tools.tavily_search import TavilySearchResults
-        tavily_tool = TavilySearchResults(max_results=3)
-    except ImportError:
-        print("    [⚠️ 警告]: 未安装 langchain_community 或缺少 Tavily 相关依赖。")
-        return {"documents": state.get("documents", [])}
-
     web_docs = []
-    seen_urls = set()
 
-    for q in queries_to_search:
-        print(f"    [🌐 正在呼叫外援检索]: {q}")
-        try:
-            # 执行全网搜索
-            results = tavily_tool.invoke({"query": q})
-            for res in results:
-                url = res.get("url", "未知网页")
-                content = res.get("content", "")
+    try:
+        # 【重构点】一行代码完成复杂的 MCP 配置、连接和工具获取
+        client, mcp_tools = await get_mcp_tools_and_client()
+        print(f"    [🔌 成功连接 MCP]: 加载了 {len(mcp_tools)} 个外部工具")
 
-                if url not in seen_urls and content:
-                    seen_urls.add(url)
-                    # 强行打上 Web 标签，让大模型在写报告时明确标出 (来源: [Web] URL)
-                    web_docs.append({
-                        "source": f"[Web] {url}",
-                        "content": f"[外部联网补充信息] {content}"
-                    })
-        except Exception as e:
-            print(f"    [⚠️ Tavily 检索异常]: {e}")
+        # 绑定工具到大模型
+        llm_with_tools = llm.bind_tools(mcp_tools)
 
-    print(f"    [外援到达]: 从互联网成功补充了 {len(web_docs)} 条外部高价值参考信息。")
+        # 构造 Prompt，让大模型自主决策使用哪个工具
+        prompt_content = f"""
+        本地文献库证据不足，请使用你的 MCP 工具进行外部检索补充。
+        你可以使用 Tavily 搜索最新学术资料，或者使用 GitHub 检索相关的开源代码实现和项目 README。
+
+        当前需要查询的关键词/问题是: {queries_to_search}
+        请调用合适的工具获取尽可能多的有效信息。
+        """
+
+        # 调用大模型进行工具选择
+        response = await llm_with_tools.ainvoke([HumanMessage(content=prompt_content)])
+
+        # 执行大模型决定的工具调用
+        if response.tool_calls:
+            for tool_call in response.tool_calls:
+                print(f"    [🌐 触发 MCP 工具]: {tool_call['name']} - 参数: {tool_call['args']}")
+
+                # 【新替换的执行逻辑】
+                target_tool = next((t for t in mcp_tools if t.name == tool_call['name']), None)
+                if target_tool:
+                    raw_result = await target_tool.ainvoke(tool_call['args'])
+                    tool_result = str(raw_result)
+                else:
+                    tool_result = f"执行失败：未找到名为 {tool_call['name']} 的工具"
+
+                source_label = f"[MCP: {tool_call['name']}]"
+                web_docs.append({
+                    "source": source_label,
+                    "content": f"[外部补充信息] {tool_result}"
+                })
+        else:
+            print("    [⚠️ 大模型认为无需调用外部工具]")
+
+    except Exception as e:
+        print(f"    [⚠️ MCP 检索异常]: {e}")
+
+    print(f"    [外援到达]: 从 MCP 工具链成功补充了 {len(web_docs)} 条高价值参考信息。")
 
     existing_docs = state.get("documents", [])
     combined_docs = existing_docs + web_docs

@@ -13,6 +13,7 @@ langchain-huggingface    # 用于接入 BGE 等本地开源 Embedding 模型
 faiss-cpu                # 语义检索的基础向量库
 rank_bm25                # 传统基于词频的检索，配合 FAISS 做混合检索
 langchain-text-splitters # 用于 Markdown 结构化切分
+networkx>=3.0
 
 # --- 数据处理与外部接入 ---
 pypdf                    # LangChain 备用 PDF 解析
