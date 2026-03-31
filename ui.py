@@ -182,27 +182,23 @@ if user_input := st.chat_input("在此输入您的研究问题"):
                                 state = event.get("state_update", {})
 
                                 # ===== 动态更新前端心跳日志 =====
-                                if node == "Domain_Configurator":
-                                    st.write("✅ **[知识预载]** 领域配置与术语库就绪。")
-                                elif node == "Query_Analyzer":
-                                    subs = state.get('sub_questions', [])
-                                    st.write(f"🔍 **[意图拆解]** 剥离出 {len(subs)} 个子检索策略...")
-                                elif node == "Adaptive_Retriever":
-                                    docs = state.get("documents", [])
-                                    st.write(f"📖 **[底层检索]** 从向量库中萃取了 {len(docs)} 条核心事实证据。")
-                                elif node == "Peer_Reviewer":
-                                    feedback = state.get("review_feedback", "")
-                                    if "APPROVED" in feedback:
-                                        st.write("⚖️ **[同行评审]** 证据链路完整，逻辑自洽，审查通过！")
-                                    else:
-                                        new_q = state.get("search_queries", [])
-                                        st.write("⚠️ **[抗幻觉审查]** 发现现有证据无法支撑结论，已打回重审。")
-                                        st.write(f"💡 **[自我反思]** 提取新搜索线索: `{', '.join(new_q)}`")
-                                elif node == "External_Search":
-                                    st.write("🌐 **[突破边界]** 触发旁路救援，正在呼叫大网模型进行全网增量检索...")
-                                elif node == "Report_Compiler":
-                                    st.write("📝 **[知识融合]** 正在汇总合规证据，撰写最终深度报告...")
-                                    final_report = state.get("final_report", "")
+                                if node == "Supervisor":
+                                    next_agent = state.get("next", "未知")
+                                    if next_agent != "FINISH":
+                                        st.write(f"👔 **[主管调度]** 决定将下一步工作交由: **{next_agent}**")
+                                elif node == "Planner":
+                                    plan = state.get("research_plan", [])
+                                    st.write(f"🗓️ **[任务规划]** Planner 已拆解出 {len(plan)} 个研究步骤。")
+                                elif node == "Researcher":
+                                    docs = state.get("collected_data", [])
+                                    st.write(f"🔍 **[资料检索]** Researcher 正在挖掘，已收集核心事实...")
+                                elif node == "Reviewer":
+                                    comments = state.get("review_comments", [])
+                                    st.write("⚖️ **[同行评审]** Reviewer 正在进行逻辑与事实核查...")
+                                elif node == "Writer":
+                                    st.write("📝 **[报告撰写]** Writer 已完成最终学术报告的撰写！")
+                                    # 🚨 修正：State 中定义的最终结果字段是 final_draft，不是 final_report
+                                    final_report = state.get("final_draft", "")
 
                             except json.JSONDecodeError:
                                 continue
