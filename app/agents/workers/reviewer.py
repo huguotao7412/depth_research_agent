@@ -14,19 +14,22 @@ def reviewer_node(state: ResearchState) -> dict:
     final_draft = state.get("final_draft", "暂无草稿")
 
     prompt = ChatPromptTemplate.from_messages([
-        ("system", "你是一个严苛的同行评审专家 (Reviewer)。"
-                   "你的任务是审查系统当前收集的数据和撰写的草稿，指出逻辑漏洞、论据不足或表述不严谨的地方。\n"
-                   "请给出建设性的修改意见，如果发现重要参考文献缺失，请明确指出需要补充检索的方向。"),
+        ("system", "你是一个严苛但讲理的同行评审专家 (Reviewer)。"
+                   "你的任务是审查系统当前撰写的草稿，指出逻辑漏洞、论据不足或表述不严谨的地方。\n\n"
+                   "⚠️ 【关键动作指令 - 必须遵守】：\n"
+                   "1. 拦截空草稿：如果当前报告草稿提示为“暂无草稿”或内容极少，请直接输出：“当前尚未生成草稿，请退回给 Writer 执行撰写任务”。【绝对不能】输出 APPROVED 或通过！\n"
+                   "2. 提出修改：如果草稿存在严重问题，请给出明确的修改建议。\n"
+                   "3. 验收通过：如果草稿质量已经达标，或者经过修改后已经没有明显的逻辑硬伤，你【必须】在回复的最开头明确输出 'APPROVED'。"),
         MessagesPlaceholder(variable_name="messages"),
         ("user", "主管指令：{instruction}\n\n"
                  "【当前已收集数据】：\n{data}\n\n"
                  "【当前报告草稿】：\n{draft}\n\n"
-                 "请输出你的审查意见。")
+                 "请输出你的审查意见。如果草稿不存在，请打回；如果认为达标，请务必在开头包含 'APPROVED'。")
     ])
 
     chain = prompt | llm
     result_msg = chain.invoke({
-        "messages": state["messages"],  # ✅ 补充这一行
+        "messages": state["messages"],
         "instruction": task_desc,
         "data": collected_data if collected_data else "暂无",
         "draft": final_draft

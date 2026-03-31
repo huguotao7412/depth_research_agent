@@ -8,16 +8,16 @@ from app.core.state import ResearchState
 def create_supervisor_node(llm: ChatOpenAI):
     system_prompt = (
         "你是一个顶尖学术研究团队的主管 (Supervisor)。"
-        "你的目标是通过协调以下团队成员来完成用户的最终研究任务：\n"
-        "1. Planner: 负责拆解复杂的学术问题，制定研究大纲。通常是任务的第一步。\n"
-        "2. Researcher: 负责检索资料和数据。在 Planner 之后执行。\n"
-        "3. Reviewer: 负责审查逻辑和事实准确性。\n"
-        "4. Writer: 负责撰写最终的学术报告。\n\n"
-        "⚠️ 【强制防死循环纪律 - 必须严格遵守】：\n"
-        "1. 单向流转原则：不要让同一个 Agent 连续执行相同的任务！如果 Planner 已生成计划，下一步请指派 Researcher。\n"
-        "2. 打断无限审查：仔细阅读最近的聊天记录，如果 Reviewer 的最新反馈中包含 '通过'、'APPROVED'、'建议通过' 或认为没有大问题，你【必须】直接选择 'FINISH' 结束工作流，绝对不允许再打回给 Writer！\n"
-        "3. 见好就收：如果 Writer 已经输出了最终版本的报告且经过了一次审查，请选择 'FINISH'。"
-        "4. 🚨 错误熔断机制 (最重要)：仔细阅读聊天记录，如果发现 Researcher 汇报了包含『错误』、『Error』、『超时』等字眼，说明底层工具已崩溃。【绝对不允许】再把任务派给 Researcher！你应该直接让 Writer 用现有的残缺数据写报告，或者直接选择 'FINISH'。"
+        "你的目标是通过协调以下团队成员来完成用户的最终研究任务。\n\n"
+        "【标准工作流 (SOP) - 必须严格按顺序流转】:\n"
+        "第 1 步: Planner - 负责拆解复杂的学术问题，制定研究大纲。\n"
+        "第 2 步: Researcher - 在大纲制定后，负责检索资料和数据。\n"
+        "第 3 步: Writer - 在数据收集完成后，【必须】由它负责基于数据撰写初始学术报告。\n"
+        "第 4 步: Reviewer - 在 Writer 产出初稿后，负责审查逻辑和事实准确性。\n\n"
+        "⚠️ 【强制调度纪律 - 必须严格遵守】：\n"
+        "1. 绝对不能跳步：在 Researcher 收集完数据后，下一步【必须】是 Writer！绝对不允许在没有草稿的情况下直接指派 Reviewer！\n"
+        "2. 结束条件 (FINISH)：仔细阅读最近的聊天记录，只有当【Writer 已经撰写了初稿】，并且【Reviewer 的最新反馈中明确包含 'APPROVED' 或 '通过'】时，你才能直接选择 'FINISH' 结束工作流。如果没有草稿产出，绝对不能 FINISH！\n"
+        "3. 🚨 错误熔断：如果发现 Researcher 汇报了包含『错误』、『Error』、『超时』等字眼，你应该直接让 Writer 用现有的残缺数据写报告，不要再让 Researcher 尝试。"
     )
 
     prompt = ChatPromptTemplate.from_messages([
@@ -42,7 +42,7 @@ def create_supervisor_node(llm: ChatOpenAI):
 
         print(f"👔 [Supervisor] 决定指派给: {decision.next_agent}")
         if decision.next_agent == "FINISH":
-            print("👔 [Supervisor] 任务圆满完成，结束图流转！")
+            print("👔 [Supervisor] 任务流转结束！")
 
         return {
             "next": decision.next_agent,
