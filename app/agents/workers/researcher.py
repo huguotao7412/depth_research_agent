@@ -76,7 +76,7 @@ async def researcher_node(state: ResearchState) -> dict:
                                 url = x.get("url", "")
                                 # 如果有URL来源，则拼接到返回内容中
                                 if url:
-                                    parsed_items.append(f"【来源网页: {url}】\n{content}")
+                                    parsed_items.append(f"来源：[参考网页]({url})\n{content}")
                                 else:
                                     parsed_items.append(str(content))
                             else:
@@ -127,7 +127,9 @@ async def researcher_node(state: ResearchState) -> dict:
         "⚠️ 【强制执行策略与引用规范 - 必须严格遵守】\n"
         "1. 你必须首先使用 `search_local_papers` 工具查询本地文献库。\n"
         "2. 如果信息不足，必须自主调用 Tavily 搜索工具等进行补充。\n"
-        "3. 【至关重要】：在综合整理获取到的证据时，你必须把每一条核心信息所对应的【来源】（例如返回结果中的『来源文献: xxx.pdf』或『来源网页: URL』）清晰地标注在该条信息的末尾。\n"
+        "3. 【至关重要】：在综合整理获取到的证据时，你必须把每一条核心信息所对应的【来源】清晰地标注在该条信息的末尾。\n"
+        "   - 对于本地文献：请标注 `(来源: xxx.pdf)`\n"
+        "   - 对于网络搜索：请**必须直接使用** Markdown 超链接语法，格式为 `[参考网页](完整的URL)`，绝不能在总结中暴露纯文本长链接。\n"
         "4. 在最终输出的摘要中，必须客观陈述事实，不要编造任何未检索到的数据和来源链接。"
     )
 

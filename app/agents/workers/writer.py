@@ -38,7 +38,10 @@ def writer_node(state: ResearchState) -> dict:
                    "1. 绝不能凭空捏造，每一项关键结论、数据、引用都【必须】在对应的句子或段落末尾标明出处。\n"
                    "2. 请根据【素材库】中提供的【来源】信息进行精准标注。\n"
                    "3. 对于本地 PDF/文献库文档：请在句末使用格式 `(来源: xxx.pdf)`。\n"
-                   "4. 对于网络搜索结果（包含 http/https 链接）：请务必使用 Markdown 的超链接语法隐藏冗长丑陋的 URL！格式必须为：`([参考网页](URL))`，**绝不能将纯文本的长 URL 直接暴露在正文中**。\n"
+                   "4. 对于网络搜索结果（包含 http/https 链接）：请提取素材中的 URL，并**务必使用 Markdown 的超链接语法**将其隐藏！\n"
+                   "   - 正确示例：`数据表明全球变暖加剧 ([参考网页](https://example.com))`\n"
+                   "   - 错误示例：`数据表明全球变暖加剧 (来源网页: https://example.com)`\n"
+                   "   **绝不能将纯文本的长 URL 直接暴露在正文中！**\n"
                    "5. 如果素材库中某条信息没有提供来源，尽量结合上下文合理表述，但不要自己伪造链接。"),
         MessagesPlaceholder(variable_name="messages"),
         ("user", "主管指令：{instruction}\n\n"
