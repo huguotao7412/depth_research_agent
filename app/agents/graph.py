@@ -1,50 +1,44 @@
-from langgraph.graph import StateGraph, START, END
-from app.core.state import AgentState
-from app.agents.nodes import (
-    domain_configurator,
-    query_analyzer,
-    adaptive_retriever,
-    peer_reviewer,
-    report_compiler,
-    external_academic_search  # 【新增】导入外网搜索节点
-)
-from app.agents.edges import check_retrieval_quality
+# app/agents/graph.py
+from langgraph.graph import StateGraph, END, START
+from app.core.state import ResearchState
+from app.agents.supervisor import create_supervisor_node
+# 假设你已经在 workers 目录下实现了这些节点函数
+from app.agents.workers.planner import planner_node
+from app.agents.workers.researcher import researcher_node
+from app.agents.workers.reviewer import reviewer_node
+from app.agents.workers.writer import writer_node
 
+def build_multi_agent_graph(llm):
+    workflow = StateGraph(ResearchState)
 
-def build_omni_research_graph():
-    # 1. 实例化状态图
-    workflow = StateGraph(AgentState)
+    # 1. 添加所有的节点
+    workflow.add_node("Supervisor", create_supervisor_node(llm))
+    workflow.add_node("Planner", planner_node)
+    workflow.add_node("Researcher", researcher_node)
+    workflow.add_node("Reviewer", reviewer_node)
+    workflow.add_node("Writer", writer_node)
 
-    # 2. 添加节点
-    workflow.add_node("Domain_Configurator", domain_configurator)
-    workflow.add_node("Query_Analyzer", query_analyzer)
-    workflow.add_node("Adaptive_Retriever", adaptive_retriever)
-    workflow.add_node("Peer_Reviewer", peer_reviewer)
-    workflow.add_node("External_Search", external_academic_search)  # 【新增】外网节点
-    workflow.add_node("Report_Compiler", report_compiler)
+    # 2. 所有的 Worker 节点完成后，必须回到 Supervisor 汇报工作
+    workflow.add_edge("Planner", "Supervisor")
+    workflow.add_edge("Researcher", "Supervisor")
+    workflow.add_edge("Reviewer", "Supervisor")
+    workflow.add_edge("Writer", "Supervisor")
 
-    # 3. 定义标准执行流 (边)
-    workflow.add_edge(START, "Domain_Configurator")
-    workflow.add_edge("Domain_Configurator", "Query_Analyzer")
-    workflow.add_edge("Query_Analyzer", "Adaptive_Retriever")
-    workflow.add_edge("Adaptive_Retriever", "Peer_Reviewer")
-
-    # 4. 定义条件路由边 (核心逻辑：从 Reviewer 出发)
+    # 3. 定义 Supervisor 的条件路由边
+    # 它会根据 state["next"] 的值自动路由到对应的 Worker 节点或结束
     workflow.add_conditional_edges(
-        "Peer_Reviewer",
-        check_retrieval_quality,
+        "Supervisor",
+        lambda state: state["next"],
         {
-            "re_retrieve": "Adaptive_Retriever",
-            "web_search": "External_Search",      # 【新增】本地查不到走外网
-            "compile_report": "Report_Compiler"
+            "Planner": "Planner",
+            "Researcher": "Researcher",
+            "Reviewer": "Reviewer",
+            "Writer": "Writer",
+            "FINISH": END
         }
     )
 
-    # 5. 旁路接入主干线
-    workflow.add_edge("External_Search", "Report_Compiler") # 搜完直接去写报告
+    # 4. 设置入口点
+    workflow.add_edge(START, "Supervisor")
 
-    # 6. 结束流
-    workflow.add_edge("Report_Compiler", END)
-
-    # 7. 编译并返回可执行的 app
     return workflow.compile()

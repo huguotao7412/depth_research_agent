@@ -5,7 +5,7 @@ from app.api.routes import router
 def create_app() -> FastAPI:
     # 1. 实例化 FastAPI
     app = FastAPI(
-        title="OmniResearch-Agent API",
+        title="DepthResearch-Agent API",
         description="可插拔式通用深度研究智能体引擎 API 服务",
         version="1.0.0"
     )

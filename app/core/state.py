@@ -1,17 +1,25 @@
 # app/core/state.py
-from typing import TypedDict, List, Dict, Any
+from typing import Annotated, Sequence, TypedDict, List
+from langchain_core.messages import BaseMessage
+from langgraph.graph.message import add_messages
+from protocols.a2a.schemas import AgentRole, AgentTaskInstruction
 
 
-class AgentState(TypedDict):
-    query: str
-    domain_config: Dict[str, Any]
-    sub_questions: List[str]
-    search_queries: List[str]
+class ResearchState(TypedDict):
+    # 核心对话与执行历史
+    messages: Annotated[Sequence[BaseMessage], add_messages]
 
-    # 【修复 1】移除 Annotated 和 operator.add，变为普通的 List
-    # 这样每次 retriever 返回新数据时，会直接覆盖掉上一轮的垃圾数据
-    documents: List[Dict[str, Any]]
+    # 原始查询及配置参数 (新增路径配置)
+    user_query: str
+    raw_docs_path: str  # <--- 新增
+    vector_db_path: str  # <--- 新增
 
-    review_feedback: str
-    retrieval_retries: int
-    final_report: str
+    # A2A 协议控制字段
+    next: AgentRole
+    current_instruction: AgentTaskInstruction
+
+    # 共享的工作区
+    research_plan: List[str]
+    collected_data: List[dict]
+    review_comments: List[str]
+    final_draft: str
