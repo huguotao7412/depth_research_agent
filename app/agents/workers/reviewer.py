@@ -1,4 +1,5 @@
 # app/agents/workers/reviewer.py
+import os
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_openai import ChatOpenAI
 from langchain_core.messages import AIMessage
@@ -6,7 +7,11 @@ from app.core.state import ResearchState
 
 
 def reviewer_node(state: ResearchState) -> dict:
-    llm = ChatOpenAI(model="deepseek-chat", temperature=0.3)
+    llm = ChatOpenAI(api_key=os.getenv("ZHIPU_API_KEY"),
+                     base_url="https://open.bigmodel.cn/api/paas/v4/",
+                     model="glm-4-flash",
+                     temperature=0.2
+                     )
     instruction = state.get("current_instruction")
     task_desc = instruction.task_description if instruction else "审查当前的资料和草稿质量"
 

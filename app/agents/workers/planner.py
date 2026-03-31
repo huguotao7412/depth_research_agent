@@ -1,4 +1,5 @@
 # app/agents/workers/planner.py
+import os
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_openai import ChatOpenAI
 from pydantic import BaseModel, Field
@@ -12,7 +13,11 @@ class ResearchPlan(BaseModel):
 
 
 def planner_node(state: ResearchState) -> dict:
-    llm = ChatOpenAI(model="deepseek-chat", temperature=0.2)
+    llm = ChatOpenAI(api_key=os.getenv("ZHIPU_API_KEY"),
+    base_url="https://open.bigmodel.cn/api/paas/v4/",
+    model="glm-4-flash",
+    temperature=0.2
+                     )
     instruction = state.get("current_instruction")
     # 如果 instruction 是对象，防止它为 None 时报错
     task_desc = instruction.task_description if instruction and hasattr(instruction,

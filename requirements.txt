@@ -4,6 +4,8 @@ langgraph>=0.0.20
 fastapi>=0.100.0
 uvicorn>=0.23.0
 streamlit>=1.30.0
+modelscope>=1.11.0
+sentence-transformers>=2.3.0
 
 # --- 检索与多向量组件 (RAG & Multi-Vector) ---
 langchain-community
