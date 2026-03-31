@@ -34,14 +34,14 @@ async def researcher_node(state: ResearchState) -> dict:
     # 🛠️ 注册工具 1：本地 RAG 检索工具 (✅ 新增提取来源 metadata)
     # ==========================================
     @tool
-    def search_local_papers(query: str) -> str:
+    async def search_local_papers(query: str) -> str:
         """
         必须优先调用的工具！用于检索用户本地挂载的 PDF 学术文献数据库。
         输入你想查询的具体关键词或研究问题，返回高相关的文献片段。
         """
         print(f"   [Tool] 📚 正在检索本地知识库: {query[:20]}...")
         retriever = OmniRetriever(raw_docs_path=raw_path, vector_db_path=db_path)
-        docs = retriever.retrieve(query)
+        docs =await retriever.aretrieve(query)
         if not docs:
             return "【系统返回】: 本地文献库中未找到相关资料。请尝试使用外部网络搜索工具。"
 

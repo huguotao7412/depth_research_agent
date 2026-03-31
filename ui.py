@@ -63,12 +63,22 @@ st.markdown("""
 
 # --- 辅助功能函数 ---
 def clear_index_cache():
-    """增删文献时清空本地向量索引缓存，强制后端下一次重建"""
+    """增删文献时清空所有相关向量索引和缓存"""
     if os.path.exists(INDEX_DIR):
         try:
             shutil.rmtree(INDEX_DIR)
         except Exception as e:
-            st.sidebar.error(f"清理索引缓存失败: {str(e)}")
+            st.sidebar.error(f"清理 FAISS 索引失败: {str(e)}")
+
+    # 补充清理同级目录下的 .pkl 缓存文件
+    base_dir = os.path.dirname(INDEX_DIR)
+    for ext in ["_bm25.pkl", "_kv_store.pkl"]:
+        cache_file = INDEX_DIR + ext
+        if os.path.exists(cache_file):
+            try:
+                os.remove(cache_file)
+            except Exception as e:
+                st.sidebar.error(f"清理缓存文件 {ext} 失败: {str(e)}")
 
 
 # --- 界面标题区域 ---

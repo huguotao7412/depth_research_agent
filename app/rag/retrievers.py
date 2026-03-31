@@ -104,7 +104,7 @@ class OmniRetriever:
             lines = table_content.split('\n')
             return f"[表格解析异常兜底] 数据表格预览: {' '.join(lines[:3])}..."
 
-    def ingest_documents(self):
+    async def aingest_documents(self):
         # 1. 确保目录一定存在
         if not os.path.exists(self.raw_docs_path):
             os.makedirs(self.raw_docs_path)
@@ -140,7 +140,7 @@ class OmniRetriever:
 
         for file in pdf_files:
             file_path = os.path.join(self.raw_docs_path, file)
-            md_file_path = self.parser.parse_pdf(file_path)
+            md_file_path =await self.parser.parse_pdf(file_path)
             with open(md_file_path, "r", encoding="utf-8") as f:
                 md_text = f.read()
 
@@ -185,11 +185,11 @@ class OmniRetriever:
                     return True
         return False
 
-    def load_or_build_index(self):
+    async def aload_or_build_index(self):
         # 如果索引过期或者不存在（比如刚 clone 下来的新用户）
         if self._is_index_outdated():
             print("🔄 索引不存在或已过期，触发知识库构建...")
-            self.ingest_documents()
+            await self.aingest_documents()
         else:
             print("🚀 正在从硬盘加载多向量索引...")
             try:
@@ -201,7 +201,7 @@ class OmniRetriever:
                     self.byte_store.store = pickle.load(f)
             except Exception as e:
                 print(f"⚠️ 硬盘索引加载失败 (可能已损坏): {e}，尝试强制重建...")
-                self.ingest_documents()
+                await self.aingest_documents()
 
         # 无论如何，最后一定要挂载 multi_retriever
         if self.vector_store is not None:
@@ -260,9 +260,9 @@ class OmniRetriever:
             print(f"⚠️ 文档动态压缩失败，回退为原始截断文本: {e}")
             return Document(page_content=doc.page_content[:1500] + "\n...(内容因过长被截断)", metadata=doc.metadata)
 
-    def retrieve(self, query: str, top_k: int = 4) -> List[Document]:
+    async def aretrieve(self, query: str, top_k: int = 4) -> List[Document]:
         if self.multi_retriever is None:
-            self.load_or_build_index()
+            await self.aload_or_build_index()
 
         # --- 1. 触发 HyDE 机制 ---
         print(f"    [🧠 触发 HyDE]: 正在为 '{query}' 实时生成假设性学术回答以增强语义检索...")

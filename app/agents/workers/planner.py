@@ -54,5 +54,4 @@ def planner_node(state: ResearchState) -> dict:
         error_msg = AIMessage(content=f"【Planner 报错】无法生成计划，错误信息: {str(e)}", name="Planner")
         return {
             "messages": [error_msg],
-            "research_plan": []
         }
