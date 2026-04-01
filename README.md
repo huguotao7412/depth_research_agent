@@ -3,25 +3,24 @@
 ![Python](https://img.shields.io/badge/Python-3.10%2B-blue)
 ![FastAPI](https://img.shields.io/badge/FastAPI-0.100%2B-009688)
 ![Streamlit](https://img.shields.io/badge/Streamlit-1.30%2B-FF4B4B)
-![LangGraph](https://img.shields.io/badge/LangGraph-Agent-orange)
+![LangGraph](https://img.shields.io/badge/LangGraph-Multi_Agent-orange)
 ![DeepSeek](https://img.shields.io/badge/LLM-DeepSeek-black)
 ![Kimi](https://img.shields.io/badge/Parser-Kimi_API-purple)
 
-
 **DepthResearch-Agent** 是一个基于 `LangGraph` 构建的解耦式、可插拔的多智能体学术研究底座。
 
-当前系统已全面升级，不仅支持一键动态挂载本地 PDF 文献库，更接入了**全网联邦检索**能力。通过融合 Kimi 高精度解析与 DeepSeek 强推理能力，自动完成复杂学术问题的自动领域嗅探、意图拆解、**HyDE 语义增强检索**、多线程并发提纯、**全网旁路救援**与深度报告生成。
+本次系统迎来了全面架构升级：深度融合了 **Kimi 高精度文档解析** 与 **DeepSeek 强逻辑推理**，并引入了全新的**智能语义路由**与**多线程提纯**机制。系统能够自主调度主管(Supervisor)、规划(Planner)、检索(Researcher)、评审(Reviewer)与撰写(Writer)智能体，为您提供端到端的沉浸式深度研究体验。
 
 ---
 
-## ✨ 核心亮点与架构优势 (全新升级)
+## ✨ 核心亮点与技术升级
 
-- ⚡ **多线程并发 LLM 提纯**：在底层检索器中引入多线程机制，并发调用大模型对召回的长文本进行“精读”与关键证据压缩。
-- 💡 **HyDE 假设性文档增强 (New)**：在触发底层 RAG 检索前，系统会实时调用大模型生成堆叠了专业术语、指标与算法概念的“假设性学术回答”，以此跨越自然语言提问与专业文献之间的语义鸿沟，极大提升向量匹配精度。
-- 🌐 **全网增量检索与旁路救援 (New)**：LangGraph 工作流新增 `External_Search` 节点。当 `Peer_Reviewer` 节点审查发现本地文献证据无法支撑结论时，将自动打回重审并提取新线索，触发大网模型进行全网增量检索，突破本地知识边界。
-- 🔍 **RRF 双引擎混合检索**：底层采用 `FAISS` 语义检索与 `BM25` 关键词检索进行多路召回，并运用 RRF (Reciprocal Rank Fusion) 算法进行融合打分，兼顾长尾语义与高频术语。
-- 🛡️ **抗幻觉同行评审**：独立的 `Peer_Reviewer` 节点强制进行逻辑自洽审查与交叉验证，确保最终生成的报告具有高度的事实准确性。
-- 🔌 **沉浸式流式监控前端**：前后端分离架构全面升级交互体验，Streamlit 前台接入流式 API，实时打印工作流心跳状态（如意图拆解、底层检索、审查反馈等），流程全透明。
+- 🧠 **智能 HyDE 语义路由 (New)**：底层检索器具备防误触机制。对于极短查询或特定算法术语（如纯英文缩写），自动走快速通道；面对复杂长句提问，则实时调用大模型生成“假设性学术回答”，跨越语义鸿沟。
+- ⚡ **多线程并发 LLM 提纯 (New)**：在召回高分文档后，系统利用 `ThreadPoolExecutor` 并发调用大模型，对多段长文本进行“精读”与关键证据压缩，极大降低上下文冗余并提升响应速度。
+- 🚀 **开箱即用的本地化网络优化**：内置 `HF_ENDPOINT` 国内高速通道镜像，并使用 `ModelScope` 自动拉取极轻量级 Embedding 模型（BGE-small）。修复了底层 C++ 库 (`KMP_DUPLICATE_LIB_OK`) 冲突问题，告别环境闪退。
+- 🔍 **RRF 双引擎混合检索**：底层采用 `FAISS` 稠密语义检索与 `BM25` 稀疏词频检索进行多路召回，通过 RRF (Reciprocal Rank Fusion) 算法精准融合打分，兼顾长尾语义与高频术语。
+- 🛡️ **LangGraph 多智能体协同**：独立的 `Peer_Reviewer` 节点强制进行逻辑自洽审查，`Supervisor` 节点根据状态机动态路由工作流，确保最终报告的事实准确性与逻辑严密性。
+- 🔌 **沉浸式流式心跳前端**：前后端完全分离。Streamlit 前台接入 FastAPI 流式接口，实时打印各 Agent 节点的工作心跳状态（规划拆解、资料挖掘、同行核查等），工作流全透明。
 
 ---
 
@@ -30,17 +29,17 @@
 ```text
 depth_research_agent/
 ├── app/                        
-│   ├── api/                    # FastAPI 接口层路由定义
-│   ├── core/                   # 状态机结构 (AgentState) 与核心 Prompt 库
-│   ├── agents/                 # LangGraph 工作流节点 (Nodes) 与包含外网搜索路由的边 (Edges)
-│   └── rag/                    # 包含 HyDE 增强与 RRF 融合的 OmniRetriever，以及 Kimi PDF解析器
-├── data/                       # 本地知识库数据流 (Git忽略)
-│   ├── raw_docs/               # 用户上传的原始 PDF 文献存放处
-│   ├── raw_docs_parsed/        # Kimi 解析产出的标准化 Markdown 文件
-│   └── vector_db/              # FAISS 向量索引与 BM25 缓存结构
+│   ├── api/                    # FastAPI 接口层定义 (支持流式传输 Stream)
+│   ├── core/                   # 状态机结构 (ResearchState) 定义
+│   ├── agents/                 # LangGraph 工作流图 (graph.py) 与 Worker 节点
+│   └── rag/                    # OmniRetriever (智能路由/并发提纯/RRF融合) 与 Kimi 解析器
+├── data/                       # 本地知识库数据流 (自动管理，Git忽略)
+│   ├── raw_docs/               # 用户上传的 PDF 文献库
+│   ├── raw_docs_parsed/        # Kimi 智能解析产出的 Markdown 文件
+│   └── vector_db/              # FAISS 索引、BM25 词典与 ByteStore 缓存
 ├── main.py                     # FastAPI 后端引擎启动入口
-├── ui.py                       # 支持流式心跳与文献管理的 Streamlit 前台
-└── requirements.txt            # 项目轻量化核心依赖
+├── ui.py                       # 沉浸式 Streamlit 前端交互与文献管理器
+└── requirements.txt            # 项目核心依赖包
 ```
 ## 🚀 快速启动 (Quick Start)
 

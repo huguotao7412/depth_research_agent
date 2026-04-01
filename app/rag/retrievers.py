@@ -7,27 +7,7 @@ import json
 import concurrent.futures
 from typing import List
 
-# ================= 网络防坑与开箱即用配置 =================
-os.environ["HF_ENDPOINT"] = "https://hf-mirror.com"
-os.environ["NO_PROXY"] = "localhost,127.0.0.1,hf-mirror.com,modelscope.cn,aliyuncs.com"
-
-
-def auto_download_model(model_id: str) -> str:
-    """智能模型加载器：优先走国内高速通道，自动缓存到本地"""
-    try:
-        from modelscope import snapshot_download
-        print(f"📦 [自动依赖] 正在检查/拉取极轻量级模型: {model_id} ...")
-        return snapshot_download(model_id)
-    except ImportError:
-        return model_id
-    except Exception as e:
-        print(f"⚠️ 高速通道加载异常，回退使用默认 HuggingFace 源...")
-        return model_id
-
-
-# =========================================================
-
-from langchain_openai import ChatOpenAI
+from langchain_openai import ChatOpenAI,OpenAIEmbeddings
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.documents import Document
@@ -52,11 +32,11 @@ class OmniRetriever:
         self.parser = KimiAPIParser(output_dir=os.path.join(self.raw_docs_path, "..", "raw_docs_parsed"))
 
         # 仅保留 95MB 的基础向量模型，实现极致轻量化
-        bge_model_path = auto_download_model("BAAI/bge-small-zh-v1.5")
-        print("⏳ 正在加载 Embedding 模型...")
-        self.embeddings = HuggingFaceEmbeddings(
-            model_name=bge_model_path,
-            model_kwargs={'device': 'cpu'}
+        print("⏳ 正在连接云端免费 Embedding 模型 API (SiliconFlow)...")
+        self.embeddings = OpenAIEmbeddings(
+            model="BAAI/bge-m3",  # 永久免费的向量模型
+            openai_api_base="https://api.siliconflow.cn/v1",  # 硅基流动的 API 地址
+            openai_api_key=os.getenv("EMBEDDING_API_KEY")
         )
 
         self.vector_store = None

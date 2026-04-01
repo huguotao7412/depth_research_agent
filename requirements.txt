@@ -1,27 +1,23 @@
-# --- 核心框架 (Core Frameworks) ---
-langchain>=0.1.0
-langgraph>=0.0.20
-fastapi>=0.100.0
-uvicorn>=0.23.0
-streamlit>=1.30.0
-modelscope>=1.11.0
-sentence-transformers>=2.3.0
+# --- 核心框架与 Web 服务 (Core Frameworks & Web) ---
+fastapi>=0.100.0         # 后端 API 引擎
+uvicorn>=0.23.0          # ASGI 服务器
+streamlit>=1.30.0        # 前端流式心跳 UI 界面
+requests                 # 前后端 API 通信
+python-dotenv            # 环境变量与 API 密钥管理
 
-# --- 检索与多向量组件 (RAG & Multi-Vector) ---
-langchain-community
-langchain-classic        # LangChain 1.0+ 经典组件包（包含 MultiVectorRetriever 等）
-langchain-openai         # [关键] 用于接入 DeepSeek 生成表格/图片摘要
-langchain-huggingface    # 用于接入 BGE 等本地开源 Embedding 模型
-faiss-cpu                # 语义检索的基础向量库
-rank_bm25                # 传统基于词频的检索，配合 FAISS 做混合检索
-langchain-text-splitters # 用于 Markdown 结构化切分
-networkx>=3.0
+# --- 智能体与大模型底座 (Agents & LLMs) ---
+langchain>=0.3.0         # 大语言模型开发框架核心
+langgraph>=0.2.0         # 多智能体状态机图 (Supervisor/Worker架构)
+langchain-openai         # DeepSeek 模型接入 (ChatOpenAI)
+langchain-core           # LangChain 核心协议与输出解析器
 
-# --- 数据处理与外部接入 ---
-pypdf                    # LangChain 备用 PDF 解析
-pymupdf                  # [关键] 提供 PyMuPDFLoader, 用于快速抽样 PDF 首页进行领域嗅探
-requests                 # 用于 Streamlit 前后端通信及 Kimi API 调用
-python-dotenv            # 加载 .env 里的 API Keys 和路径配置
+# --- 检索增强与多向量组件 (RAG & Multi-Vector) ---
+langchain-community      # FAISS 与 BM25 集成包
+langchain-classic        # MultiVectorRetriever 等经典检索组件
+langchain-text-splitters # Markdown 结构化切分器
+faiss-cpu                # 底层稠密向量检索库
+rank_bm25                # 稀疏关键词词频检索库
 
-# --- 评测与可观测性 ---
-ragas                    # 智能体性能评估闭环
+# --- 文档解析与处理 (Document Parsing) ---
+pypdf                    # 基础 PDF 解析支持
+pymupdf                  # 高效 PDF 抽样与领域嗅探
