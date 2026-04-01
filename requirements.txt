@@ -1,23 +1,23 @@
-# --- 核心框架与 Web 服务 (Core Frameworks & Web) ---
-fastapi>=0.100.0         # 后端 API 引擎
-uvicorn>=0.23.0          # ASGI 服务器
-streamlit>=1.30.0        # 前端流式心跳 UI 界面
-requests                 # 前后端 API 通信
-python-dotenv            # 环境变量与 API 密钥管理
+# Web & API Framework
+fastapi>=0.109.0
+uvicorn>=0.27.0
+pydantic>=2.5.3
 
-# --- 智能体与大模型底座 (Agents & LLMs) ---
-langchain>=0.3.0         # 大语言模型开发框架核心
-langgraph>=0.2.0         # 多智能体状态机图 (Supervisor/Worker架构)
-langchain-openai         # DeepSeek 模型接入 (ChatOpenAI)
-langchain-core           # LangChain 核心协议与输出解析器
+# LangChain & LangGraph Ecosystem
+langchain>=0.1.13
+langchain-core>=0.1.33
+langchain-openai>=0.1.1
+langchain-community>=0.0.29
+langchain-text-splitters>=0.0.1
+langgraph>=0.0.26
 
-# --- 检索增强与多向量组件 (RAG & Multi-Vector) ---
-langchain-community      # FAISS 与 BM25 集成包
-langchain-classic        # MultiVectorRetriever 等经典检索组件
-langchain-text-splitters # Markdown 结构化切分器
-faiss-cpu                # 底层稠密向量检索库
-rank_bm25                # 稀疏关键词词频检索库
+# RAG & Vector Database
+faiss-cpu>=1.8.0
+rank-bm25>=0.2.2
+tiktoken>=0.6.0
 
-# --- 文档解析与处理 (Document Parsing) ---
-pypdf                    # 基础 PDF 解析支持
-pymupdf                  # 高效 PDF 抽样与领域嗅探
+# Network & File Parsing
+httpx>=0.27.0
+python-dotenv>=1.0.1
+
+# 备注: 如果系统已安装其他特定的 MCP SDK，可在此处追加

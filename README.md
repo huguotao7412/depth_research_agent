@@ -15,12 +15,14 @@
 
 ## ✨ 核心亮点与技术升级
 
-- 🧠 **智能 HyDE 语义路由 (New)**：底层检索器具备防误触机制。对于极短查询或特定算法术语（如纯英文缩写），自动走快速通道；面对复杂长句提问，则实时调用大模型生成“假设性学术回答”，跨越语义鸿沟。
-- ⚡ **多线程并发 LLM 提纯 (New)**：在召回高分文档后，系统利用 `ThreadPoolExecutor` 并发调用大模型，对多段长文本进行“精读”与关键证据压缩，极大降低上下文冗余并提升响应速度。
-- 🚀 **开箱即用的本地化网络优化**：内置 `HF_ENDPOINT` 国内高速通道镜像，并使用 `ModelScope` 自动拉取极轻量级 Embedding 模型（BGE-small）。修复了底层 C++ 库 (`KMP_DUPLICATE_LIB_OK`) 冲突问题，告别环境闪退。
-- 🔍 **RRF 双引擎混合检索**：底层采用 `FAISS` 稠密语义检索与 `BM25` 稀疏词频检索进行多路召回，通过 RRF (Reciprocal Rank Fusion) 算法精准融合打分，兼顾长尾语义与高频术语。
-- 🛡️ **LangGraph 多智能体协同**：独立的 `Peer_Reviewer` 节点强制进行逻辑自洽审查，`Supervisor` 节点根据状态机动态路由工作流，确保最终报告的事实准确性与逻辑严密性。
-- 🔌 **沉浸式流式心跳前端**：前后端完全分离。Streamlit 前台接入 FastAPI 流式接口，实时打印各 Agent 节点的工作心跳状态（规划拆解、资料挖掘、同行核查等），工作流全透明。
+- **🧠 LangGraph 多智能体协作**：内置 Supervisor（主管）、Planner（规划师）、Researcher（研究员）、Writer（撰稿人）和 Reviewer（审查员），严格遵循学术工作流。
+- **📚 混合检索与 RAG 架构**：
+  - **本地文献库**：集成 Kimi API 进行 PDF 异步精准解析，使用 SiliconFlow (BGE-M3) 生成向量，结合 FAISS + BM25 实现双路高精度召回。
+  - **动态 HyDE 拓展**：对复杂的长句查询自动生成假设性学术回答，增强检索准确度。
+- **🌐 MCP 联邦检索**：无缝挂载 Tavily 和 GitHub 等外部工具，本地资料不足时自动进行全网深度搜索。
+- **📝 严格的溯源与引用规范**：所有生成的关键结论均会携带明确来源（本地 PDF 文件名或合规的 Markdown 网页超链接），杜绝大模型幻觉。
+- **🎨 动态行文风格**：无论是结构严谨的“深度研究报告”，还是自然流畅的“国内外研究现状（文献综述）”，Writer 节点都能根据指令自适应调整排版与行文逻辑。
+- **🔌 沉浸式流式心跳前端**：前后端完全分离。Streamlit 前台接入 FastAPI 流式接口，实时打印各 Agent 节点的工作心跳状态（规划拆解、资料挖掘、同行核查等），工作流全透明。
 
 ---
 
@@ -61,12 +63,16 @@ pip install -r requirements.txt
 ### 2. 环境配置 (.env)
 在项目根目录下创建一个 .env 文件，并填入以下内容。本项目默认使用 DeepSeek 进行逻辑推理，Kimi (Moonshot) 进行 PDF 解析：
 ```bash
-# Kimi (Moonshot) API Key - 用于云端高精度 PDF 解析
-MOONSHOT_API_KEY="sk-你的Kimi密钥"
-
-# DeepSeek API 配置 - 用于 LangGraph 逻辑推理与报告生成
+# 大模型配置 (默认使用 DeepSeek)
 OPENAI_API_BASE="[https://api.deepseek.com/v1](https://api.deepseek.com/v1)"
-OPENAI_API_KEY="sk-你的DeepSeek密钥"
+OPENAI_API_KEY="your_deepseek_api_key"
+
+# Planner 节点使用智谱 GLM-4
+ZHIPU_API_KEY="your_zhipu_api_key"
+
+# 文献解析与向量化
+MOONSHOT_API_KEY="your_kimi_api_key" # 用于长文本 PDF 解析
+EMBEDDING_API_KEY="your_siliconflow_api_key" # 硅基流动 BGE-M3 向量模型
 ```
 ### 3. 启动系统
 本项目采用前后端分离设计，需要分别启动后端 API 服务和前端 UI 服务。
