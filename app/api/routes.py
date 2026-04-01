@@ -7,12 +7,13 @@ from pydantic import BaseModel, Field
 from typing import List, Optional
 from langchain_openai import ChatOpenAI
 from app.agents.graph import build_multi_agent_graph
+from app.core.llm_factory import get_llm
 
 router = APIRouter()
 print("⏳ 正在挂载 LangGraph Multi-Agent 引擎...")
 
 # ✅ 修正 1：必须初始化 LLM 并调用函数实例化图！
-llm = ChatOpenAI(model="deepseek-chat", temperature=0)
+llm = get_llm(model_type="main", temperature=0.0)
 research_agent = build_multi_agent_graph(llm)
 
 class ResearchRequest(BaseModel):

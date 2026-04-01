@@ -5,6 +5,7 @@ from langchain_openai import ChatOpenAI
 from pydantic import BaseModel, Field
 from langchain_core.messages import AIMessage
 from app.core.state import ResearchState
+from app.core.llm_factory import get_llm
 
 
 class ResearchPlan(BaseModel):
@@ -13,11 +14,7 @@ class ResearchPlan(BaseModel):
 
 
 def planner_node(state: ResearchState) -> dict:
-    llm = ChatOpenAI(api_key=os.getenv("ZHIPU_API_KEY"),
-    base_url="https://open.bigmodel.cn/api/paas/v4/",
-    model="glm-4-flash",
-    temperature=0.2
-                     )
+    llm = get_llm(model_type="fast", temperature=0.2)
     instruction = state.get("current_instruction")
     # 如果 instruction 是对象，防止它为 None 时报错
     task_desc = instruction.task_description if instruction and hasattr(instruction,
@@ -26,7 +23,9 @@ def planner_node(state: ResearchState) -> dict:
     prompt = ChatPromptTemplate.from_messages([
         ("system", "你是一个严谨的学术规划师 (Planner)。"
                    "你的任务是根据主管的指令和用户原始需求，拆解出具体的研究子任务。\n"
-                   "例如：将其拆分为：1. 原理剖析；2. 现有痛点；3. 算法对策等。\n"
+                   "【拆解原则】\n"
+                   "1. 动态深度：根据用户问题的复杂程度，动态决定子任务的数量（通常 2-5 个），用户问的精准时，子任务数量少，问的笼统时，子任务数量多，不要拘泥于固定的数量。\n"
+                   "2. 结构严谨：遵循 MECE 原则，确保子任务之间相互独立且完全穷尽。\n"
                    "必须严格输出 JSON 格式的结构化数据。"),
         MessagesPlaceholder(variable_name="messages"),
         ("user", "主管的具体指令：{instruction}\n请输出详细的研究计划。")

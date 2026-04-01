@@ -10,19 +10,13 @@ from app.rag.retrievers import OmniRetriever
 
 # 🔌 引入你写好的 MCP 客户端
 from protocols.mcp.client import get_mcp_tools_and_client
+from app.core.llm_factory import get_llm
 
 
 async def researcher_node(state: ResearchState) -> dict:
     print("\n⏳ [Researcher] 开始工作 (已激活 本地RAG + MCP联邦检索 模式)...")
 
-    api_base = os.getenv("OPENAI_API_BASE", "https://api.deepseek.com/v1")
-    llm = ChatOpenAI(
-        model="deepseek-chat",
-        temperature=0,
-        base_url=api_base,
-        timeout=60,
-        max_retries=2
-    )
+    llm = get_llm(model_type="main", temperature=0.0)
 
     instruction = state.get("current_instruction")
     task_desc = instruction.task_description if instruction else "检索相关文献并提取关键数据"

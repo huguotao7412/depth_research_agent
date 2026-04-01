@@ -4,14 +4,11 @@ from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_openai import ChatOpenAI
 from langchain_core.messages import AIMessage
 from app.core.state import ResearchState
+from app.core.llm_factory import get_llm
 
 
 def reviewer_node(state: ResearchState) -> dict:
-    llm = ChatOpenAI(api_key=os.getenv("ZHIPU_API_KEY"),
-                     base_url="https://open.bigmodel.cn/api/paas/v4/",
-                     model="glm-4-flash",
-                     temperature=0.2
-                     )
+    llm = get_llm(model_type="fast", temperature=0.2)
     instruction = state.get("current_instruction")
     task_desc = instruction.task_description if instruction else "审查当前的资料和草稿质量"
 

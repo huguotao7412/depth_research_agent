@@ -3,7 +3,6 @@ import re
 import uuid
 import time
 import pickle
-import json
 import concurrent.futures
 from typing import List
 
@@ -12,18 +11,20 @@ from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.documents import Document
 from langchain_text_splitters import MarkdownHeaderTextSplitter
-from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_community.vectorstores import FAISS
 from langchain_community.retrievers import BM25Retriever
 from langchain_classic.retrievers import MultiVectorRetriever
 from langchain_core.stores import InMemoryByteStore
 
 from app.rag.pdf_parser import KimiAPIParser
+from app.core.llm_factory import get_embeddings
+from app.core.llm_factory import get_llm
 
 
 class OmniRetriever:
     def __init__(self, raw_docs_path: str, vector_db_path: str):
-        self.llm = ChatOpenAI(model="deepseek-chat", temperature=0, max_retries=3, timeout=40)
+        self.llm = get_llm(model_type="main", temperature=0.0)
+        self.cheap_llm = get_llm(model_type="fast", temperature=0.2)
         self.raw_docs_path = os.path.normpath(raw_docs_path)
         self.vector_db_path = os.path.normpath(vector_db_path)
         self.bm25_path = os.path.normpath(f"{vector_db_path}_bm25.pkl")
@@ -31,14 +32,8 @@ class OmniRetriever:
 
         self.parser = KimiAPIParser(output_dir=os.path.join(self.raw_docs_path, "..", "raw_docs_parsed"))
 
-        # 仅保留 95MB 的基础向量模型，实现极致轻量化
         print("⏳ 正在连接云端免费 Embedding 模型 API (SiliconFlow)...")
-        self.embeddings = OpenAIEmbeddings(
-            model="BAAI/bge-m3",  # 永久免费的向量模型
-            openai_api_base="https://api.siliconflow.cn/v1",  # 硅基流动的 API 地址
-            openai_api_key=os.getenv("EMBEDDING_API_KEY"),
-            chunk_size=50
-        )
+        self.embeddings = get_embeddings()
 
         self.vector_store = None
         self.bm25_retriever = None
@@ -168,7 +163,7 @@ class OmniRetriever:
         prompt = ChatPromptTemplate.from_template(
             "针对下面的学术问题，写一段简短包含专业术语的学术回答(不含寒暄)：\n{query}")
         try:
-            return (prompt | self.llm | StrOutputParser()).invoke({"query": query}).strip()
+            return (prompt | self.cheap_llm | StrOutputParser()).invoke({"query": query}).strip()
         except:
             return query
 
@@ -176,7 +171,7 @@ class OmniRetriever:
         if len(doc.page_content) < 300: return doc
         prompt = ChatPromptTemplate.from_template("从片段中提取回答【{query}】的核心信息，无关直接回复NONE：\n{context}")
         try:
-            summary = (prompt | self.llm | StrOutputParser()).invoke(
+            summary = (prompt | self.cheap_llm | StrOutputParser()).invoke(
                 {"query": query, "context": doc.page_content[:4000]}).strip()
             return None if summary.upper().startswith("NONE") else Document(page_content=f"[提炼] {summary}",
                                                                             metadata=doc.metadata)
