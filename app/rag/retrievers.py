@@ -36,7 +36,8 @@ class OmniRetriever:
         self.embeddings = OpenAIEmbeddings(
             model="BAAI/bge-m3",  # 永久免费的向量模型
             openai_api_base="https://api.siliconflow.cn/v1",  # 硅基流动的 API 地址
-            openai_api_key=os.getenv("EMBEDDING_API_KEY")
+            openai_api_key=os.getenv("EMBEDDING_API_KEY"),
+            chunk_size=50
         )
 
         self.vector_store = None
