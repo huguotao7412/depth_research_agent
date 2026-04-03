@@ -2,6 +2,8 @@
 import os
 from langchain_mcp_adapters.client import MultiServerMCPClient
 
+_GLOBAL_MCP_CLIENT = None
+_GLOBAL_MCP_TOOLS = None
 
 def _get_mcp_server_params() -> dict:
     """内部方法：统一管理所有 MCP Server 的配置参数"""
@@ -25,8 +27,14 @@ async def get_mcp_tools_and_client():
     """
     外部接口：初始化并返回 MultiServerMCPClient 实例及其解析出的工具列表。
     """
+    global _GLOBAL_MCP_CLIENT, _GLOBAL_MCP_TOOLS
+    if _GLOBAL_MCP_CLIENT is not None and _GLOBAL_MCP_TOOLS is not None:
+        return _GLOBAL_MCP_CLIENT, _GLOBAL_MCP_TOOLS
     params = _get_mcp_server_params()
     client = MultiServerMCPClient(params)
     tools = await client.get_tools()
+
+    _GLOBAL_MCP_CLIENT = client
+    _GLOBAL_MCP_TOOLS = tools
 
     return client, tools

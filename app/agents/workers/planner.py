@@ -1,7 +1,5 @@
 # app/agents/workers/planner.py
-import os
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
-from langchain_openai import ChatOpenAI
 from pydantic import BaseModel, Field
 from langchain_core.messages import AIMessage
 from app.core.state import ResearchState
@@ -14,7 +12,7 @@ class ResearchPlan(BaseModel):
 
 
 def planner_node(state: ResearchState) -> dict:
-    llm = get_llm(model_type="fast", temperature=0.2)
+    llm = get_llm(model_type="main", temperature=0.2)
     instruction = state.get("current_instruction")
     # 如果 instruction 是对象，防止它为 None 时报错
     task_desc = instruction.task_description if instruction and hasattr(instruction,
@@ -44,6 +42,10 @@ def planner_node(state: ResearchState) -> dict:
             "instruction": task_desc
         })
 
+        # 🚨 核心修复：增加空值校验
+        if result is None or not hasattr(result, 'steps'):
+            raise ValueError("大模型未能成功生成合规的 JSON 结构大纲。")
+
         plan_text = "\n".join([f"{i + 1}. {step}" for i, step in enumerate(result.steps)])
         response_msg = AIMessage(
             content=f"【Planner 汇报】规划完成。\n思考过程：{result.reasoning}\n\n研究计划如下：\n{plan_text}",
@@ -56,7 +58,7 @@ def planner_node(state: ResearchState) -> dict:
     except Exception as e:
         print(f"Planner 节点执行失败: {e}")
         # 返回一个降级信息让流程继续或让主管知道出错
-        error_msg = AIMessage(content=f"【Planner 报错】无法生成计划，错误信息: {str(e)}", name="Planner")
+        error_msg = AIMessage(content=f"【Planner 报错】无法生成计划，错误信息: {str(e)}。建议重试。", name="Planner")
         return {
             "messages": [error_msg],
         }

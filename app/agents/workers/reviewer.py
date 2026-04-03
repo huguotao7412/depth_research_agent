@@ -6,7 +6,7 @@ from app.core.llm_factory import get_llm
 
 
 def reviewer_node(state: ResearchState) -> dict:
-    llm = get_llm(model_type="fast", temperature=0.2)
+    llm = get_llm(model_type="main", temperature=0.2)
     instruction = state.get("current_instruction")
     task_desc = instruction.task_description if instruction else "审查当前的资料和草稿质量"
 

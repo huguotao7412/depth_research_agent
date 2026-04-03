@@ -1,7 +1,7 @@
 # app/agents/supervisor.py
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_openai import ChatOpenAI
-from protocols.a2a.schemas import SupervisorDecision
+from protocols.a2a.schemas import SupervisorDecision, AgentTaskInstruction # 🚨 引入 AgentTaskInstruction
 from app.core.state import ResearchState
 
 def create_supervisor_node(llm: ChatOpenAI):
@@ -11,7 +11,6 @@ def create_supervisor_node(llm: ChatOpenAI):
         messages = state.get("messages", [])
         last_agent = messages[-1].name if messages and hasattr(messages[-1], "name") else "User"
 
-        # 🚀 优化点 1：重构 Prompt，明确回溯与闭环机制
         system_prompt = f"""你是一个顶尖学术研究团队的主管 (Supervisor)。
 你的目标是通过协调以下团队成员来完成深度学术调研与写作。
 
@@ -25,9 +24,9 @@ def create_supervisor_node(llm: ChatOpenAI):
 
 🔄 【核心调度逻辑：深度研究闭环】：
 1. 常规推进：Planner 规划 -> Researcher 检索 -> Writer 撰写 -> Reviewer 审查。
-2. 缺失打回（数据层）：如果 Reviewer 提出核心数据缺失或事实不足（例如：“缺乏毫米波雷达测量血压时针对运动伪影处理的最新算法对比”），你【必须】唤醒 Researcher 进行定向补充检索！
-3. 润色打回（文本层）：如果 Reviewer 仅提出结构调整或文字润色建议，请唤醒 Writer 基于现有数据进行修改。
-4. 异常熔断：如果 Researcher 遇到网络瘫痪或致命报错，让 Writer 尽力用已有的残缺数据产出报告。
+2. 缺失打回（数据层）：如果 Reviewer 提出核心数据缺失或事实不足，你【必须】唤醒 Researcher 进行定向补充检索！
+3. 润色打回（文本层）：如果 Reviewer 仅提出结构调整或文字润色建议，请唤醒 Writer 修改。
+4. 异常熔断：如果 Researcher 遇到网络瘫痪或致命报错，让 Writer 尽力用残缺数据产出报告。
 
 ✅ 【结束条件 (FINISH)】:
 只有当 Reviewer 最新的审查意见中明确包含 'APPROVED' 或 '通过' 时，你才能选择 'FINISH' 结束工作流。绝不可提前结束！
@@ -48,8 +47,19 @@ def create_supervisor_node(llm: ChatOpenAI):
             "messages": messages
         })
 
-        # 🚀 优化点 2：删除这里原本的“代码级防御性拦截”，允许动态流转
-        # (原有的 if last_agent == "Researcher" and decision.next_agent == "Reviewer" 被彻底移除)
+        # ==========================================
+        # 🚨 核心修复：应对 GLM-4-Flash 等模型格式输出失败
+        # ==========================================
+        if decision is None:
+            print("⚠️ [Supervisor] 警告：大模型未能输出有效调度指令(返回了 None)。触发兜底降级...")
+            return {
+                "next": "Planner",
+                "current_instruction": AgentTaskInstruction(
+                    target_agent="Planner",
+                    task_description="由于调度解析异常，请重新评估当前进度并制定下一步计划。",
+                    context_required=""
+                )
+            }
 
         print(f"👔 [Supervisor] 决定指派给: {decision.next_agent}")
         if decision.next_agent == "FINISH":

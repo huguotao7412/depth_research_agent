@@ -1,12 +1,12 @@
 import os
 import re
 import uuid
+import httpx
 import time
 import pickle
 import concurrent.futures
 from typing import List
 
-from langchain_openai import ChatOpenAI,OpenAIEmbeddings
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.documents import Document
@@ -20,6 +20,14 @@ from app.rag.pdf_parser import KimiAPIParser
 from app.core.llm_factory import get_embeddings
 from app.core.llm_factory import get_llm
 
+_RETRIEVER_INSTANCES = {}
+
+def get_retriever(raw_docs_path: str = "data/raw_docs", vector_db_path: str = "data/vector_db/faiss_index"):
+    global _RETRIEVER_INSTANCES
+    key = (raw_docs_path, vector_db_path)
+    if key not in _RETRIEVER_INSTANCES:
+        _RETRIEVER_INSTANCES[key] = OmniRetriever(raw_docs_path, vector_db_path)
+    return _RETRIEVER_INSTANCES[key]
 
 class OmniRetriever:
     def __init__(self, raw_docs_path: str, vector_db_path: str):
@@ -159,13 +167,54 @@ class OmniRetriever:
             self.multi_retriever = MultiVectorRetriever(vectorstore=self.vector_store, byte_store=self.byte_store,
                                                         id_key=self.id_key)
 
-    def _generate_hyde_document(self, query: str) -> str:
-        prompt = ChatPromptTemplate.from_template(
-            "针对下面的学术问题，写一段简短包含专业术语的学术回答(不含寒暄)：\n{query}")
+    async def _rerank_documents(self, query: str, docs: List[Document], top_n: int = 2) -> List[Document]:
+        if not docs:
+            return []
+
+            # 防御性截断，确保不会超过 API 的单次处理限制（通常是 64 或 128）
+        if len(docs) > 64:
+            docs = docs[:64]
+
+        api_key = os.getenv("EMBEDDING_API_KEY")
+        url = "https://api.siliconflow.cn/v1/rerank"
+
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json"
+        }
+
+        # 提取纯文本
+        doc_texts = [d.page_content if d.page_content.strip() else "Empty Content" for d in docs]
+
+        # 🚨 关键修复点：将 "docs" 改为 "documents"
+        payload = {
+            "model": "BAAI/bge-reranker-v2-m3",
+            "query": query,
+            "documents": doc_texts,  # <--- 必须是 documents
+            "top_n": top_n,
+            "return_documents": False
+        }
+
         try:
-            return (prompt | self.cheap_llm | StrOutputParser()).invoke({"query": query}).strip()
-        except:
-            return query
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                response = await client.post(url, headers=headers, json=payload)
+
+                # 如果还是 400，打印出具体的错误响应体，方便进一步排查
+                if response.status_code != 200:
+                    print(f"    [❌ Rerank API 报错]: 状态码 {response.status_code}, 内容: {response.text}")
+                    return docs[:top_n]
+
+                result = response.json()
+                reranked_docs = []
+                for item in result.get("results", []):
+                    idx = item["index"]
+                    docs[idx].metadata["rerank_score"] = item["relevance_score"]
+                    reranked_docs.append(docs[idx])
+
+                return reranked_docs
+        except Exception as e:
+            print(f"    [❌ Rerank 网络异常]: {str(e)}，降级返回原顺序。")
+            return docs[:top_n]
 
     def _compress_document(self, query: str, doc: Document) -> Document | None:
         if len(doc.page_content) < 300: return doc
@@ -179,22 +228,14 @@ class OmniRetriever:
             return Document(page_content=doc.page_content[:1500] + "...", metadata=doc.metadata)
 
     async def aretrieve(self, query: str, top_k: int = 4) -> List[Document]:
-        if self.multi_retriever is None: await self.aload_or_build_index()
+        if self._is_index_outdated():
+            self.multi_retriever = None
 
-        # ================= 智能 HyDE 路由 =================
-        # 判断逻辑：
-        # 1. 字符总长度小于 8 的极短查询（例如："血压测量", "毫米波"）
-        # 2. 纯英文、数字、空格和连字符组成的查询（通常是特定算法、缩写、公式，例如："BM25", "FMCW radar"）
-        if len(query.strip()) < 8 or re.match(r'^[a-zA-Z0-9\-\s]+$', query.strip()):
-            print(f"    [⚡ 快速通道]: 短查询或精确术语 '{query}' 命中快速通道，跳过 HyDE")
-            hypothetical_doc = query  # 直接使用原问题去检索
-        else:
-            print(f"    [🧠 语义拓展]: 复杂长句触发 HyDE，生成假设性学术回答...")
-            hypothetical_doc = self._generate_hyde_document(query)
-        # =================================================
+        if self.multi_retriever is None:
+            await self.aload_or_build_index()
 
         # FAISS & BM25 双路召回
-        faiss_sub = self.vector_store.similarity_search(hypothetical_doc)
+        faiss_sub = self.vector_store.similarity_search(query, k=10)
         bm25_sub = self.bm25_retriever.invoke(query)
 
         def resolve_docs(sub_docs):
@@ -210,27 +251,21 @@ class OmniRetriever:
         faiss_docs = resolve_docs(faiss_sub)
         mapped_bm25 = resolve_docs(bm25_sub)
 
-        # RRF 融合
-        scores, doc_map = {}, {}
+        # ================= 去重与 Rerank =================
+        unique_docs_map = {}
 
         def get_uid(doc):
             return str(doc.metadata.get(self.id_key) or hash(doc.page_content))
 
-        for rank, d in enumerate(mapped_bm25):
-            uid = get_uid(d);
-            doc_map[uid] = d;
-            scores[uid] = scores.get(uid, 0) + 1 / (rank + 60)
-        for rank, d in enumerate(faiss_docs):
-            uid = get_uid(d);
-            doc_map[uid] = d;
-            scores[uid] = scores.get(uid, 0) + 1 / (rank + 60)
+        for d in faiss_docs + mapped_bm25:
+            uid = get_uid(d)
+            if uid not in unique_docs_map:
+                unique_docs_map[uid] = d
 
-        sorted_res = sorted(scores.items(), key=lambda x: x[1], reverse=True)
-        raw_top_docs = [doc_map[uid] for uid, score in sorted_res[:top_k]]
+        candidate_docs = list(unique_docs_map.values())
 
-        # ================= 强力截断 =================
-        strict_top_docs = raw_top_docs[:2]  # 死死卡住长文本数量为2
-        print(f"    [✂️ 极简截断]: 锁定 Top {len(strict_top_docs)} 核心文档...")
+        # 调用硅基流动接口进行重排序 (保持你之前修复的 documents 传参)
+        strict_top_docs = await self._rerank_documents(query, candidate_docs, top_n=top_k)
 
         # ================= 并行大模型提纯 =================
         compressed_docs = []

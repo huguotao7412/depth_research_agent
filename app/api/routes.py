@@ -5,7 +5,6 @@ from fastapi.responses import StreamingResponse
 from fastapi.encoders import jsonable_encoder # 🚨 新增：防止 JSON 序列化报错
 from pydantic import BaseModel, Field
 from typing import List, Optional
-from langchain_openai import ChatOpenAI
 from app.agents.graph import build_multi_agent_graph
 from app.core.llm_factory import get_llm
 
@@ -18,6 +17,7 @@ research_agent = build_multi_agent_graph(llm)
 
 class ResearchRequest(BaseModel):
     query: str
+    chat_history: Optional[List[dict]] = Field(default=[], description="前端传来的历史对话记录")
     domain: Optional[str] = Field(default="通用学术领域", description="研究领域")
     glossary: Optional[List[str]] = Field(default=[], description="核心术语列表")
     raw_docs_path: Optional[str] = Field(default="data/raw_docs", description="PDF存放路径")
@@ -38,10 +38,17 @@ async def run_research(request: ResearchRequest):
 @router.post("/research/stream", summary="流式提交深度研究任务 (SSE)")
 async def run_research_stream(request: ResearchRequest):
     async def event_generator():
+        messages_input = []
+        for msg in request.chat_history:  # ✅ 注入历史记忆
+            role = "user" if msg["role"] == "user" else "assistant"
+            messages_input.append((role, msg["content"]))
+
+        # 将本次的新问题也加进去
+        messages_input.append(("user", request.query))
         # ✅ 修正 2：对齐 ResearchState，加入 messages 字段激活流转
         inputs = {
             "user_query": request.query,
-            "messages": [("user", request.query)],
+            "messages": messages_input,
             "raw_docs_path": request.raw_docs_path,
             "vector_db_path": request.vector_db_path
         }

@@ -160,7 +160,9 @@ if user_input := st.chat_input("在此输入您的研究问题"):
         # 使用流式状态盒替代死板的 Spinner
         with st.status("🧠 深度研究智能体已启动，正在规划工作流...", expanded=True) as status_box:
 
-            payload = {"query": user_input}
+            payload = {"query": user_input,
+                       "chat_history": st.session_state.chat_history[:-1]}
+
             final_report = ""
             start_time = time.time()
 

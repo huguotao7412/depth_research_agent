@@ -1,6 +1,33 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.api.routes import router
+from protocols.mcp.client import get_mcp_tools_and_client
+from app.rag.retrievers import get_retriever
+from contextlib import asynccontextmanager
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    print("\n🚀 [Lifespan] 后端服务启动中：正在后台预热长耗时组件...")
+
+    # 1. 预热 MCP 客户端 (瞬间拉起 Node.js 进程)
+    try:
+        await get_mcp_tools_and_client()
+        print("✅ [Lifespan] MCP 联邦检索服务器预加载完成！")
+    except Exception as e:
+        print(f"⚠️ [Lifespan] MCP 预热失败，将在首次检索时重试: {e}")
+
+    # 2. 预热本地文献向量库 (加载硬盘数据到内存)
+    try:
+        # 使用默认路径预加载
+        retriever = get_retriever()
+        await retriever.aload_or_build_index()
+        print("✅ [Lifespan] FAISS 向量库预加载完成！")
+    except Exception as e:
+        print(f"⚠️ [Lifespan] 向量库预热失败: {e}")
+
+    yield
+    print("\n🛑 [Lifespan] 后端服务正在关闭...")
 
 def create_app() -> FastAPI:
     # 1. 实例化 FastAPI

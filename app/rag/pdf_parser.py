@@ -22,6 +22,12 @@ class KimiAPIParser:
         使用 Kimi API 异步解析本地 PDF 文件
         """
         pdf_name = Path(pdf_path).stem
+        doc_output_dir = os.path.join(self.output_dir, pdf_name)
+        md_path = os.path.join(doc_output_dir, f"{pdf_name}.md")
+
+        if os.path.exists(md_path):
+            print(f"⚡ 检测到本地已存在解析结果，跳过 Kimi API 调用: {md_path}")
+            return md_path
         print(f"☁️ 正在使用 Kimi 大模型【异步】解析本地文献: {pdf_name}...")
 
         headers = {

@@ -1,7 +1,6 @@
 # app/agents/workers/researcher.py
 import os
 from langchain_core.messages import AIMessage
-from langchain_openai import ChatOpenAI
 from langchain_core.tools import tool
 from langchain_core.tools import StructuredTool
 from langgraph.prebuilt import create_react_agent
@@ -11,7 +10,7 @@ from app.rag.retrievers import OmniRetriever
 # 🔌 引入你写好的 MCP 客户端
 from protocols.mcp.client import get_mcp_tools_and_client
 from app.core.llm_factory import get_llm
-
+from app.rag.retrievers import get_retriever
 
 async def researcher_node(state: ResearchState) -> dict:
     print("\n⏳ [Researcher] 开始工作 (已激活 本地RAG + MCP联邦检索 模式)...")
@@ -27,6 +26,7 @@ async def researcher_node(state: ResearchState) -> dict:
     # ==========================================
     # 🛠️ 注册工具 1：本地 RAG 检索工具 (✅ 新增提取来源 metadata)
     # ==========================================
+    local_retriever = get_retriever(raw_docs_path=raw_path, vector_db_path=db_path)
     @tool
     async def search_local_papers(query: str) -> str:
         """
@@ -34,8 +34,7 @@ async def researcher_node(state: ResearchState) -> dict:
         输入你想查询的具体关键词或研究问题，返回高相关的文献片段。
         """
         print(f"   [Tool] 📚 正在检索本地知识库: {query[:20]}...")
-        retriever = OmniRetriever(raw_docs_path=raw_path, vector_db_path=db_path)
-        docs =await retriever.aretrieve(query)
+        docs = await local_retriever.aretrieve(query)
         if not docs:
             return "【系统返回】: 本地文献库中未找到相关资料。请尝试使用外部网络搜索工具。"
 

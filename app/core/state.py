@@ -1,4 +1,5 @@
 # app/core/state.py
+import operator
 from typing import Annotated, Sequence, TypedDict, List
 from langchain_core.messages import BaseMessage
 from langgraph.graph.message import add_messages
@@ -19,7 +20,7 @@ class ResearchState(TypedDict):
     current_instruction: AgentTaskInstruction
 
     # 共享的工作区
-    research_plan: List[str]
-    collected_data: List[dict]
-    review_comments: List[str]
+    research_plan: Annotated[List[str], operator.add]
+    collected_data: Annotated[List[dict], operator.add]
+    review_comments: Annotated[List[str], operator.add]
     final_draft: str
