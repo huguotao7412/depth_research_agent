@@ -1,47 +1,64 @@
-# 🔬 DepthResearch-Agent (深度研究智能体引擎)
+# 🔬 DepthResearch-Agent | 下一代多智能体深度研究引擎
 
-![Python](https://img.shields.io/badge/Python-3.10%2B-blue)
-![FastAPI](https://img.shields.io/badge/FastAPI-0.100%2B-009688)
-![Streamlit](https://img.shields.io/badge/Streamlit-1.30%2B-FF4B4B)
-![LangGraph](https://img.shields.io/badge/LangGraph-Multi_Agent-orange)
-![DeepSeek](https://img.shields.io/badge/LLM-DeepSeek-black)
-![Kimi](https://img.shields.io/badge/Parser-Kimi_API-purple)
+![Python](https://img.shields.io/badge/Python-3.10%2B-blue?style=for-the-badge&logo=python)
+![LangGraph](https://img.shields.io/badge/LangGraph-Multi_Agent-FF9900?style=for-the-badge)
+![FastAPI](https://img.shields.io/badge/FastAPI-Streaming-009688?style=for-the-badge&logo=fastapi)
+![Streamlit](https://img.shields.io/badge/Streamlit-Immersive_UI-FF4B4B?style=for-the-badge&logo=streamlit)
+![DeepSeek](https://img.shields.io/badge/LLM-DeepSeek-black?style=for-the-badge)
+![Kimi](https://img.shields.io/badge/Parser-Kimi_API-purple?style=for-the-badge)
 
-**DepthResearch-Agent** 是一个基于 `LangGraph` 构建的解耦式、可插拔的多智能体学术研究底座。
-
-本次系统迎来了全面架构升级：深度融合了 **Kimi 高精度文档解析** 与 **DeepSeek 强逻辑推理**，并引入了全新的**智能语义路由**与**多线程提纯**机制。系统能够自主调度主管(Supervisor)、规划(Planner)、检索(Researcher)、评审(Reviewer)与撰写(Writer)智能体，为您提供端到端的沉浸式深度研究体验。
-
----
-
-## ✨ 核心亮点与技术升级
-
-- **🧠 LangGraph 多智能体协作**：内置 Supervisor（主管）、Planner（规划师）、Researcher（研究员）、Writer（撰稿人）和 Reviewer（审查员），严格遵循学术工作流。
-- **📚 混合检索与 RAG 架构**：
-  - **本地文献库**：集成 Kimi API 进行 PDF 异步精准解析，使用 SiliconFlow (BGE-M3) 生成向量，结合 FAISS + BM25 实现双路高精度召回。
-  - **动态 HyDE 拓展**：对复杂的长句查询自动生成假设性学术回答，增强检索准确度。
-- **🌐 MCP 联邦检索**：无缝挂载 Tavily 和 GitHub 等外部工具，本地资料不足时自动进行全网深度搜索。
-- **📝 严格的溯源与引用规范**：所有生成的关键结论均会携带明确来源（本地 PDF 文件名或合规的 Markdown 网页超链接），杜绝大模型幻觉。
-- **🎨 动态行文风格**：无论是结构严谨的“深度研究报告”，还是自然流畅的“国内外研究现状（文献综述）”，Writer 节点都能根据指令自适应调整排版与行文逻辑。
-- **🔌 沉浸式流式心跳前端**：前后端完全分离。Streamlit 前台接入 FastAPI 流式接口，实时打印各 Agent 节点的工作心跳状态（规划拆解、资料挖掘、同行核查等），工作流全透明。
+> **还在为堆积如山的 PDF 文献和漫无目的的全网检索发愁吗？**
+> 欢迎来到自动化科研的新纪元。**DepthResearch-Agent** 彻底重塑了学术研究与深度调研的工作流。我们不仅提供了一个工具，更为您配备了一支**不知疲倦、严谨苛刻的虚拟学术团队**。
 
 ---
 
-## 📂 项目架构
+## 🔥 核心优势 (Why Choose Us?)
+
+传统的大模型应用往往受限于“单脑思考”和“数据幻觉”。DepthResearch-Agent 通过极致的架构设计，为您带来降维打击般的体验：
+
+* 🧠 **多脑协同，复刻真实学术团队**
+    系统内置五大独立智能体：**主管(Supervisor)**全局调度、**规划师(Planner)**庖丁解牛、**研究员(Researcher)**深度挖掘、**审查员(Reviewer)**严苛把关、**撰稿人(Writer)**落笔生花。各司其职，自我纠错，拒绝“大模型一本正经地胡说八道”。
+* 📡 **本地+全网 混合双擎检索 (RAG + MCP)**
+    本地资料匮乏？不用担心。我们在双路高精度本地召回（FAISS + BM25）的基础上，无缝挂载 **MCP 联邦检索**（Tavily/GitHub）。一旦本地文献不足，Agent 会自动突破边界，进行全网实时追踪。
+* 🎯 **极致无损，PDF 变身“结构化富矿”**
+    抛弃粗糙的开源解析方案。我们深度集成 **Kimi 高精度文档解析**，完美还原复杂学术 PDF 中的表格、多级标题与段落，搭配 BGE-M3 向量模型，确保每一个关键数据都不被遗漏。
+* 🛡️ **零幻觉，字字皆有出处的“铁律”**
+    生成的每一条核心结论，都必须携带清晰的来源标注（精准到具体 PDF 文件名或可点击的网页超链接）。没有证据，绝不编造！
+* ⚡ **全景透明，流式心跳交互 (SSE)**
+    拒绝“黑盒等待”。基于 FastAPI + Streamlit 打造的前后分离架构，实时打印各大智能体的工作心跳与思考轨迹，让您像大 Boss 一样沉浸式看着您的虚拟团队为您冲锋陷阵。
+
+---
+
+## 🛠 硬核技术栈 (Tech Stack)
+
+本项目采用目前最前沿的 AI 应用开发组合：
+
+- **智能体编排 (Orchestration):** `LangGraph` (基于状态机的循环调度与容错机制)
+- **大模型基座 (LLM Core):** 强推理模型 `DeepSeek` (主节点) + 高性价比模型 `GLM-4-Flash` (规划/提纯节点)
+- **文档解析 (Document Parsing):** `Kimi (Moonshot) API` (长文本/复杂版面异步提取)
+- **混合检索 (Hybrid Retrieval):** `FAISS` (密集向量) + `Rank-BM25` (稀疏词频) + `SiliconFlow BGE-M3` (Rerank 重排序)
+- **外部拓展 (Tooling):** `Model Context Protocol (MCP)` 挂载 Tavily 等全网搜索引擎
+- **高性能后端 (Backend):** `FastAPI` (原生异步处理与 SSE 流式推送)
+- **交互层 (Frontend):** `Streamlit` (极简、专注的交互体验)
+
+---
+
+## 📂 优雅的架构设计
 
 ```text
 depth_research_agent/
 ├── app/                        
-│   ├── api/                    # FastAPI 接口层定义 (支持流式传输 Stream)
-│   ├── core/                   # 状态机结构 (ResearchState) 定义
-│   ├── agents/                 # LangGraph 工作流图 (graph.py) 与 Worker 节点
-│   └── rag/                    # OmniRetriever (智能路由/并发提纯/RRF融合) 与 Kimi 解析器
-├── data/                       # 本地知识库数据流 (自动管理，Git忽略)
-│   ├── raw_docs/               # 用户上传的 PDF 文献库
-│   ├── raw_docs_parsed/        # Kimi 智能解析产出的 Markdown 文件
-│   └── vector_db/              # FAISS 索引、BM25 词典与 ByteStore 缓存
-├── main.py                     # FastAPI 后端引擎启动入口
-├── ui.py                       # 沉浸式 Streamlit 前端交互与文献管理器
-└── requirements.txt            # 项目核心依赖包
+│   ├── api/                    # FastAPI 核心接口 (支持 SSE 流式心跳)
+│   ├── core/                   # 全局状态机 (ResearchState) 与 LLM 工厂
+│   ├── agents/                 # LangGraph 多智能体工作流引擎 (Supervisor等5大节点)
+│   └── rag/                    # OmniRetriever (并发提纯/RRF融合) 与 Kimi 解析器
+├── data/                       # 您的专属知识保险箱 (本地化隔离)
+│   ├── raw_docs/               # PDF 原文库
+│   ├── raw_docs_parsed/        # 结构化 Markdown 数据
+│   └── vector_db/              # 向量、词典与键值对缓存
+├── protocols/                  # A2A (Agent to Agent) 通信协议与 MCP 外部接口
+├── main.py                     # API 引擎点火开关
+└── ui.py                       # Streamlit 沉浸式驾驶舱
 ```
 ## 🚀 快速启动 (Quick Start)
 
@@ -63,16 +80,24 @@ pip install -r requirements.txt
 ### 2. 环境配置 (.env)
 在项目根目录下创建一个 .env 文件，并填入以下内容。本项目默认使用 DeepSeek 进行逻辑推理，Kimi (Moonshot) 进行 PDF 解析：
 ```bash
-# 大模型配置 (默认使用 DeepSeek)
-OPENAI_API_BASE="[https://api.deepseek.com/v1](https://api.deepseek.com/v1)"
-OPENAI_API_KEY="your_deepseek_api_key"
+# 【必填】主力大模型配置 (默认推荐 DeepSeek)
+MAIN_LLM_BASE_URL="[https://api.deepseek.com/v1](https://api.deepseek.com/v1)"
+MAIN_LLM_API_KEY="your_deepseek_api_key"
+MAIN_LLM_MODEL_NAME="deepseek-chat"
 
-# Planner 节点使用智谱 GLM-4
-ZHIPU_API_KEY="your_zhipu_api_key"
+# 【必填】轻量模型配置 (用于大纲规划与数据提纯，推荐 GLM-4)
+FAST_LLM_BASE_URL="[https://open.bigmodel.cn/api/paas/v4/](https://open.bigmodel.cn/api/paas/v4/)"
+FAST_LLM_API_KEY="your_zhipu_api_key"
+FAST_LLM_MODEL_NAME="glm-4-flash"
 
-# 文献解析与向量化
-MOONSHOT_API_KEY="your_kimi_api_key" # 用于长文本 PDF 解析
-EMBEDDING_API_KEY="your_siliconflow_api_key" # 硅基流动 BGE-M3 向量模型
+# 【必填】文献解析与向量化 (Kimi + SiliconFlow)
+MOONSHOT_API_KEY="your_kimi_api_key"
+EMBEDDING_BASE_URL="[https://api.siliconflow.cn/v1](https://api.siliconflow.cn/v1)"
+EMBEDDING_API_KEY="your_siliconflow_api_key"
+EMBEDDING_MODEL_NAME="BAAI/bge-m3"
+
+# 【可选】MCP 全网搜索配置
+TAVILY_API_KEY="your_tavily_api_key"
 ```
 ### 3. 启动系统
 本项目采用前后端分离设计，需要分别启动后端 API 服务和前端 UI 服务。
