@@ -123,6 +123,7 @@ async def researcher_node(state: ResearchState) -> dict:
         "   - 对于本地文献：请标注 `(来源: xxx.pdf)`\n"
         "   - 对于网络搜索：请**必须直接使用** Markdown 超链接语法，格式为 `[参考网页](完整的URL)`，绝不能在总结中暴露纯文本长链接。\n"
         "4. 在最终输出的摘要中，必须客观陈述事实，不要编造任何未检索到的数据和来源链接。"
+        "5. 🛑 【防死循环指令】：最多连续调用工具不超过 5 次。一旦收集到足够支撑任务的核心信息，必须立刻停止检索，直接输出最终的文字总结报告，绝不能无休止地反复调用工具！"
     )
 
     research_agent = create_react_agent(llm, tools)
@@ -134,7 +135,9 @@ async def researcher_node(state: ResearchState) -> dict:
                 ("system", system_prompt),
                 ("user", task_desc)
             ]
-        })
+        },
+            config={"recursion_limit": 30}
+        )
 
         final_content = agent_result["messages"][-1].content
         print("✅ [Researcher] 证据收集完毕！")

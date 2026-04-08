@@ -62,7 +62,7 @@ async def run_research_stream(request: ResearchRequest):
         }
 
         try:
-            async for output in research_agent.astream(inputs, config={"recursion_limit": 15}):
+            async for output in research_agent.astream(inputs, config={"recursion_limit": 50}):
                 for node_name, state_update in output.items():
                     event_data = {
                         "node": node_name,
@@ -76,9 +76,7 @@ async def run_research_stream(request: ResearchRequest):
 
         except GraphRecursionError:
 
-            # 🚨 提升 2: 优雅地捕获死循环并推送到前端
-
-            error_msg = "⚠️ 团队讨论超过15轮，触发强制熔断保护。请尝试细化您的研究问题。"
+            error_msg = "⚠️ 团队讨论超过50轮，触发强制熔断保护。请尝试细化您的研究问题。"
 
             print(f"\n❌ {error_msg}")
 
