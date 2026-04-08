@@ -43,9 +43,13 @@ def create_supervisor_node(llm: ChatOpenAI):
             method="function_calling"
         )
 
-        decision: SupervisorDecision = supervisor_chain.invoke({
-            "messages": messages
-        })
+        try:
+            decision: SupervisorDecision = supervisor_chain.invoke({
+                "messages": messages
+            })
+        except Exception as e:
+            print(f"⚠️ [Supervisor] 模型格式输出崩溃或解析异常: {str(e)}")
+            decision = None  # 强制进入下方的兜底降级流程
 
         # ==========================================
         # 🚨 核心修复：应对 GLM-4-Flash 等模型格式输出失败

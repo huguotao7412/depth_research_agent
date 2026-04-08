@@ -27,8 +27,12 @@ def writer_node(state: ResearchState) -> dict:
         else:
             raw_data_list.append(f"- 【真实证据】: {info}")
 
-    # 🚨 2. 直接使用原生拼接数据，跳过所有二次压缩
     compressed_data = "\n\n".join(raw_data_list)
+
+    MAX_CHAR_LIMIT = 25000
+    if len(compressed_data) > MAX_CHAR_LIMIT:
+        print(f"⚠️ [Writer] 检索数据过大 ({len(compressed_data)} 字符)，触发安全截断。")
+        compressed_data = compressed_data[:MAX_CHAR_LIMIT] + "\n\n...[由于 Context Window 限制，部分早期检索数据已省略]..."
 
     reviews = "\n".join(state.get("review_comments", []))
     current_draft = state.get("final_draft", "")

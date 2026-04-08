@@ -1,6 +1,9 @@
+import os
+import shutil
+import asyncio
 import json
 import traceback  # 🚨 新增：用于打印异常堆栈
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, UploadFile, File
 from fastapi.responses import StreamingResponse
 from fastapi.encoders import jsonable_encoder # 🚨 新增：防止 JSON 序列化报错
 from pydantic import BaseModel, Field
@@ -8,6 +11,8 @@ from typing import List, Optional
 from app.agents.graph import build_multi_agent_graph
 from app.core.llm_factory import get_llm
 from langgraph.errors import GraphRecursionError
+from langchain_core.messages import HumanMessage, AIMessage
+from app.rag.retrievers import get_retriever
 
 router = APIRouter()
 print("⏳ 正在挂载 LangGraph Multi-Agent 引擎...")
@@ -41,11 +46,13 @@ async def run_research_stream(request: ResearchRequest):
     async def event_generator():
         messages_input = []
         for msg in request.chat_history:  # ✅ 注入历史记忆
-            role = "user" if msg["role"] == "user" else "assistant"
-            messages_input.append((role, msg["content"]))
+            if msg["role"] == "user":
+                messages_input.append(HumanMessage(content=msg["content"]))
+            else:
+                agent_name = msg.get("name", "Assistant")
+                messages_input.append(AIMessage(content=msg["content"], name=agent_name))
 
-        # 将本次的新问题也加进去
-        messages_input.append(("user", request.query))
+        messages_input.append(HumanMessage(content=request.query))
         # ✅ 修正 2：对齐 ResearchState，加入 messages 字段激活流转
         inputs = {
             "user_query": request.query,
@@ -89,3 +96,48 @@ async def run_research_stream(request: ResearchRequest):
             yield f"data: {json.dumps({'error': str(e)}, ensure_ascii=False)}\n\n"
 
     return StreamingResponse(event_generator(), media_type="text/event-stream")
+
+
+# 🚨 新增：文献上传与异步建库接口
+@router.post("/docs/upload", summary="上传文献并异步建库")
+async def upload_document(file: UploadFile = File(...)):
+    docs_dir = "data/raw_docs"
+    os.makedirs(docs_dir, exist_ok=True)
+    file_path = os.path.join(docs_dir, file.filename)
+
+    # 1. 保存文件
+    with open(file_path, "wb") as f:
+        f.write(await file.read())
+
+    # 2. 触发后台异步建库，不阻塞前端响应
+    retriever = get_retriever()
+    asyncio.create_task(retriever.aingest_documents())
+
+    return {"status": "success", "message": f"{file.filename} 上传成功，后台正在解析建库"}
+
+
+# 🚨 新增：文献删除与缓存清理接口
+@router.delete("/docs/{filename}", summary="删除文献并重建索引")
+async def delete_document(filename: str):
+    file_path = os.path.join("data/raw_docs", filename)
+    if os.path.exists(file_path):
+        os.remove(file_path)
+
+        # 清理旧索引目录
+        index_dir = "data/vector_db/faiss_index"
+        if os.path.exists(index_dir):
+            shutil.rmtree(index_dir)
+
+        # 清理同级缓存文件
+        for ext in ["_bm25.pkl", "_kv_store.pkl"]:
+            cache_file = index_dir + ext
+            if os.path.exists(cache_file):
+                os.remove(cache_file)
+
+        # 触发后台重新建库
+        retriever = get_retriever()
+        asyncio.create_task(retriever.aingest_documents())
+
+        return {"status": "success", "message": "删除成功，索引正在后台重建"}
+
+    raise HTTPException(status_code=404, detail="文件不存在")

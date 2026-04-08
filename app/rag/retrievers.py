@@ -4,6 +4,7 @@ import uuid
 import httpx
 import time
 import pickle
+import asyncio
 import concurrent.futures
 from typing import List
 
@@ -108,10 +109,15 @@ class OmniRetriever:
         print(f"📚 发现 {len(pdf_files)} 篇文献，开始解析与建库(纯向量+BM25)...")
         vector_docs, store_docs = [], []
 
+        parse_tasks = []
         for file in pdf_files:
             file_path = os.path.join(self.raw_docs_path, file)
-            # 注意这里使用了之前修复好的 aparse_pdf
-            md_file_path = await self.parser.aparse_pdf(file_path)
+            parse_tasks.append(self.parser.aparse_pdf(file_path))
+
+        md_file_paths = await asyncio.gather(*parse_tasks)
+
+        # 拿到并发解析结果后再依次建库
+        for md_file_path, file in zip(md_file_paths, pdf_files):
             with open(md_file_path, "r", encoding="utf-8") as f:
                 md_text = f.read()
 
@@ -184,7 +190,7 @@ class OmniRetriever:
         }
 
         # 提取纯文本
-        doc_texts = [d.page_content if d.page_content.strip() else "Empty Content" for d in docs]
+        doc_texts = [d.page_content[:800] if d.page_content.strip() else "Empty Content" for d in docs]
 
         # 🚨 关键修复点：将 "docs" 改为 "documents"
         payload = {
