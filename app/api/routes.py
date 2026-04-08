@@ -7,6 +7,7 @@ from pydantic import BaseModel, Field
 from typing import List, Optional
 from app.agents.graph import build_multi_agent_graph
 from app.core.llm_factory import get_llm
+from langgraph.errors import GraphRecursionError
 
 router = APIRouter()
 print("⏳ 正在挂载 LangGraph Multi-Agent 引擎...")
@@ -54,22 +55,37 @@ async def run_research_stream(request: ResearchRequest):
         }
 
         try:
-            async for output in research_agent.astream(inputs):
+            async for output in research_agent.astream(inputs, config={"recursion_limit": 15}):
                 for node_name, state_update in output.items():
                     event_data = {
                         "node": node_name,
                         "state_update": state_update
                     }
-                    # ✅ 修正 3：使用 jsonable_encoder 安全转换复杂对象 (如 AIMessage, Pydantic)
                     safe_event_data = jsonable_encoder(event_data)
                     yield f"data: {json.dumps(safe_event_data, ensure_ascii=False)}\n\n"
 
             yield "data: [DONE]\n\n"
 
+
+        except GraphRecursionError:
+
+            # 🚨 提升 2: 优雅地捕获死循环并推送到前端
+
+            error_msg = "⚠️ 团队讨论超过15轮，触发强制熔断保护。请尝试细化您的研究问题。"
+
+            print(f"\n❌ {error_msg}")
+
+            yield f"data: {json.dumps({'error': error_msg}, ensure_ascii=False)}\n\n"
+
+
         except Exception as e:
-            # 🚨 修正 4：必须打印堆栈，否则后端假死你根本不知道错在哪！
+
+            # 原本的兜底异常处理
+
             print("\n❌ 代理流转期间发生严重错误:")
+
             traceback.print_exc()
+
             yield f"data: {json.dumps({'error': str(e)}, ensure_ascii=False)}\n\n"
 
     return StreamingResponse(event_generator(), media_type="text/event-stream")

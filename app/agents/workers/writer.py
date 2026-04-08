@@ -14,9 +14,12 @@ def writer_node(state: ResearchState) -> dict:
 
     plan_text = "\n".join([f"- {step}" for step in state.get("research_plan", [])])
 
+    all_data = state.get("collected_data", [])
+    recent_data = all_data[-5:] if len(all_data) > 5 else all_data
+
     # 1. 组装原始数据
     raw_data_list = []
-    for d in state.get("collected_data", []):
+    for d in recent_data:
         info = d.get('extracted_info', '')
         source = d.get('source', d.get('url', ''))
         if source:

@@ -5,7 +5,6 @@ from langchain_core.tools import tool
 from langchain_core.tools import StructuredTool
 from langgraph.prebuilt import create_react_agent
 from app.core.state import ResearchState
-from app.rag.retrievers import OmniRetriever
 
 # 🔌 引入你写好的 MCP 客户端
 from protocols.mcp.client import get_mcp_tools_and_client
@@ -150,9 +149,8 @@ async def researcher_node(state: ResearchState) -> dict:
         "extracted_info": final_content,
         "source": "详见上方内容中提取的【来源文献/网页】标注"
     }
-    existing_data = state.get("collected_data") or []
 
     return {
         "messages": [AIMessage(content=f"【资料收集完毕】\n{final_content}", name="Researcher")],
-        "collected_data": existing_data + [new_data]
+        "collected_data": [new_data]
     }

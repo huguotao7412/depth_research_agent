@@ -35,10 +35,7 @@ def reviewer_node(state: ResearchState) -> dict:
         "draft": final_draft
     })
 
-    # 获取已有列表副本，避免原地修改(append)影响历史状态树
-    existing_comments = state.get("review_comments", [])
-
     return {
         "messages": [AIMessage(content=f"【审查意见】\n{result_msg.content}", name="Reviewer")],
-        "review_comments": existing_comments + [result_msg.content]
+        "review_comments": [result_msg.content] # LangGraph 会自动追加
     }

@@ -20,7 +20,7 @@ class ResearchState(TypedDict):
     current_instruction: AgentTaskInstruction
 
     # 共享的工作区
-    research_plan: Annotated[List[str], operator.add]
+    research_plan: List[str]
     collected_data: Annotated[List[dict], operator.add]
     review_comments: Annotated[List[str], operator.add]
     final_draft: str

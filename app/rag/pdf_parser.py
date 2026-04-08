@@ -1,5 +1,7 @@
 import os
-import httpx  # ✅ 1. 引入 httpx
+import httpx
+import aiofiles
+import asyncio
 from pathlib import Path
 from dotenv import load_dotenv
 
@@ -41,12 +43,12 @@ class KimiAPIParser:
             # 步骤 1: 异步上传本地文件
             # ==========================================
             upload_url = "https://api.moonshot.cn/v1/files"
-            with open(pdf_path, 'rb') as f:
-                files = {"file": (f"{pdf_name}.pdf", f, "application/pdf")}
+            async with aiofiles.open(pdf_path, 'rb') as f:
+                content = await f.read()
+                files = {"file": (f"{pdf_name}.pdf", content, "application/pdf")}
                 data = {"purpose": "file-extract"}
 
                 print("🚀 正在异步上传本地文件...")
-                # ✅ 4. 使用 await 发起异步 POST 请求
                 upload_res = await client.post(upload_url, headers=headers, files=files, data=data)
                 upload_res.raise_for_status()
 
@@ -62,15 +64,22 @@ class KimiAPIParser:
             # 步骤 2: 异步获取解析后的 Markdown 内容
             # ==========================================
             content_url = f"https://api.moonshot.cn/v1/files/{file_id}/content"
-            # ✅ 5. 使用 await 发起异步 GET 请求
-            content_res = await client.get(content_url, headers=headers)
-            content_res.raise_for_status()
+            md_content = ""
+            print(f"✅ 文件上传成功 (ID: {file_id})，等待云端解析完成...")
+            for attempt in range(10):
+                content_res = await client.get(content_url, headers=headers)
 
-            result_data = content_res.json()
-            md_content = result_data.get("content", "")
+                if content_res.status_code == 200:
+                    result_data = content_res.json()
+                    md_content = result_data.get("content", "")
+                    if md_content:
+                        break  # 获取成功，跳出轮询
+
+                print(f"   [Kimi] 尚未解析完毕，等待 3 秒后重试 (第 {attempt + 1} 次)...")
+                await asyncio.sleep(3)
 
             if not md_content:
-                raise Exception("内容提取失败，返回内容为空！")
+                raise Exception("内容提取失败，云端解析超时或返回内容为空！")
 
         # ==========================================
         # 步骤 3: 保存结果到本地文件 (本地磁盘 I/O 极快，可保持同步)
