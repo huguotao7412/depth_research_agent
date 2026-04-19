@@ -28,3 +28,5 @@ env/
 # 忽略临时测试脚本产生的垃圾文件
 
 
+/data/workspace_1/
+/data/workspaces.json
