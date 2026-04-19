@@ -1,3 +1,4 @@
+# app/rag/retrievers.py
 import os
 import re
 import uuid
@@ -21,7 +22,10 @@ from app.rag.pdf_parser import KimiAPIParser
 from app.core.llm_factory import get_embeddings
 from app.core.llm_factory import get_llm
 
+from app.core.workspace import get_workspaces, update_workspace_name  # 🚨 引入领域嗅探更新模块
+
 _RETRIEVER_INSTANCES = {}
+
 
 def get_retriever(raw_docs_path: str = "data/raw_docs", vector_db_path: str = "data/vector_db/faiss_index"):
     global _RETRIEVER_INSTANCES
@@ -29,6 +33,7 @@ def get_retriever(raw_docs_path: str = "data/raw_docs", vector_db_path: str = "d
     if key not in _RETRIEVER_INSTANCES:
         _RETRIEVER_INSTANCES[key] = OmniRetriever(raw_docs_path, vector_db_path)
     return _RETRIEVER_INSTANCES[key]
+
 
 class OmniRetriever:
     def __init__(self, raw_docs_path: str, vector_db_path: str):
@@ -117,10 +122,16 @@ class OmniRetriever:
 
         md_file_paths = await asyncio.gather(*parse_tasks)
 
+        first_md_text = None  # 🚨 领域嗅探准备：抓取首篇文献内容
+
         # 拿到并发解析结果后再依次建库
         for md_file_path, file in zip(md_file_paths, pdf_files):
             with open(md_file_path, "r", encoding="utf-8") as f:
                 md_text = f.read()
+
+            # 🚨 记录第一篇有内容的文献片段，用于 AI 嗅探
+            if first_md_text is None and len(md_text.strip()) > 50:
+                first_md_text = md_text[:1000]
 
             elements = self._extract_elements(md_text, file)
 
@@ -149,6 +160,30 @@ class OmniRetriever:
             pickle.dump(self.bm25_retriever, f)
 
         print("✅ 多向量架构持久化完成！")
+
+        # ==================================================
+        # 🤖 核心改造：后台静默 AI 领域嗅探 (Domain Sniffer)
+        # ==================================================
+        try:
+            # 根据当前库路径推导物理 ID，比如从 data/workspace_1/raw_docs 取出 workspace_1
+            workspace_id = os.path.basename(os.path.dirname(self.raw_docs_path))
+            workspaces = get_workspaces()
+
+            # 如果是尚未被嗅探过的新建工作区
+            if workspace_id in workspaces and not workspaces[workspace_id].get("is_sniffed", False):
+                if first_md_text and len(first_md_text.strip()) > 50:
+                    print(f"🕵️ [Domain Sniffer] 检测到全新研究区文献，启动大模型静默推断领域...")
+                    prompt = ChatPromptTemplate.from_template(
+                        "你是一个高级学术领域嗅探器。请根据以下文献片段，用 5-15 个字以内总结这个工作区的核心研究领域（例如：'大语言模型 RAG 技术'、'毫米波雷达生理监测'）。只输出最终领域名称，绝对不要输出任何多余解释和标点符号。\n\n{text}"
+                    )
+                    chain = prompt | self.cheap_llm | StrOutputParser()
+                    domain_name = chain.invoke({"text": first_md_text}).strip()
+                    domain_name = domain_name.replace('"', '').replace("'", "")  # 去除首尾可能的引号
+
+                    update_workspace_name(workspace_id, domain_name)
+                    print(f"✨ [Domain Sniffer] 嗅探完成！物理层 {workspace_id} 前端已重命名为: 【{domain_name}】")
+        except Exception as e:
+            print(f"⚠️ [Domain Sniffer] 后台领域嗅探发生异常，跳过此操作: {e}")
 
     def _is_index_outdated(self) -> bool:
         faiss_file = os.path.join(self.vector_db_path, "index.faiss")

@@ -3,7 +3,7 @@ import shutil
 import asyncio
 import json
 import traceback  # 🚨 新增：用于打印异常堆栈
-from fastapi import APIRouter, HTTPException, UploadFile, File
+from fastapi import APIRouter, HTTPException, UploadFile, File,Form
 from fastapi.responses import StreamingResponse
 from fastapi.encoders import jsonable_encoder # 🚨 新增：防止 JSON 序列化报错
 from pydantic import BaseModel, Field
@@ -13,16 +13,25 @@ from app.core.llm_factory import get_llm
 from langgraph.errors import GraphRecursionError
 from langchain_core.messages import HumanMessage, AIMessage
 from app.rag.retrievers import get_retriever
+from app.core.workspace import get_workspaces, create_workspace
 
 router = APIRouter()
-print("⏳ 正在挂载 LangGraph Multi-Agent 引擎...")
-
-# ✅ 修正 1：必须初始化 LLM 并调用函数实例化图！
 llm = get_llm(model_type="main", temperature=0.0)
 research_agent = build_multi_agent_graph(llm)
 
+# 🚨 1. 暴露工作区管理 API
+@router.get("/workspaces", summary="获取所有工作区")
+def list_workspaces():
+    return get_workspaces()
+
+@router.post("/workspaces", summary="创建新工作区")
+def add_new_workspace():
+    new_id = create_workspace()
+    return {"workspace_id": new_id}
+
 class ResearchRequest(BaseModel):
     query: str
+    workspace_id: str
     chat_history: Optional[List[dict]] = Field(default=[], description="前端传来的历史对话记录")
     domain: Optional[str] = Field(default="通用学术领域", description="研究领域")
     glossary: Optional[List[str]] = Field(default=[], description="核心术语列表")
@@ -41,11 +50,12 @@ async def run_research(request: ResearchRequest):
     # (省略普通接口代码，保持你之前的修改即可)
     pass
 
+
 @router.post("/research/stream", summary="流式提交深度研究任务 (SSE)")
 async def run_research_stream(request: ResearchRequest):
     async def event_generator():
         messages_input = []
-        for msg in request.chat_history:  # ✅ 注入历史记忆
+        for msg in request.chat_history:
             if msg["role"] == "user":
                 messages_input.append(HumanMessage(content=msg["content"]))
             else:
@@ -53,89 +63,67 @@ async def run_research_stream(request: ResearchRequest):
                 messages_input.append(AIMessage(content=msg["content"], name=agent_name))
 
         messages_input.append(HumanMessage(content=request.query))
-        # ✅ 修正 2：对齐 ResearchState，加入 messages 字段激活流转
+
+        # 🚨 3. 核心解耦：根据前端传来的 workspace_id 动态拼装路径
         inputs = {
             "user_query": request.query,
             "messages": messages_input,
-            "raw_docs_path": request.raw_docs_path,
-            "vector_db_path": request.vector_db_path
+            "raw_docs_path": f"data/{request.workspace_id}/raw_docs",
+            "vector_db_path": f"data/{request.workspace_id}/vector_db/faiss_index"
         }
 
         try:
             async for output in research_agent.astream(inputs, config={"recursion_limit": 50}):
                 for node_name, state_update in output.items():
-                    event_data = {
-                        "node": node_name,
-                        "state_update": state_update
-                    }
-                    safe_event_data = jsonable_encoder(event_data)
-                    yield f"data: {json.dumps(safe_event_data, ensure_ascii=False)}\n\n"
-
+                    event_data = {"node": node_name, "state_update": state_update}
+                    yield f"data: {json.dumps(jsonable_encoder(event_data), ensure_ascii=False)}\n\n"
             yield "data: [DONE]\n\n"
-
-
-        except GraphRecursionError:
-
-            error_msg = "⚠️ 团队讨论超过50轮，触发强制熔断保护。请尝试细化您的研究问题。"
-
-            print(f"\n❌ {error_msg}")
-
-            yield f"data: {json.dumps({'error': error_msg}, ensure_ascii=False)}\n\n"
-
-
         except Exception as e:
-
-            # 原本的兜底异常处理
-
-            print("\n❌ 代理流转期间发生严重错误:")
-
             traceback.print_exc()
-
             yield f"data: {json.dumps({'error': str(e)}, ensure_ascii=False)}\n\n"
 
     return StreamingResponse(event_generator(), media_type="text/event-stream")
 
 
 # 🚨 新增：文献上传与异步建库接口
+# 🚨 4. 上传与删除接口绑定 workspace_id
 @router.post("/docs/upload", summary="上传文献并异步建库")
-async def upload_document(file: UploadFile = File(...)):
-    docs_dir = "data/raw_docs"
+async def upload_document(file: UploadFile = File(...), workspace_id: str = Form(...)):
+    docs_dir = f"data/{workspace_id}/raw_docs"
+    vector_db_path = f"data/{workspace_id}/vector_db/faiss_index"
     os.makedirs(docs_dir, exist_ok=True)
-    file_path = os.path.join(docs_dir, file.filename)
 
-    # 1. 保存文件
+    file_path = os.path.join(docs_dir, file.filename)
     with open(file_path, "wb") as f:
         f.write(await file.read())
 
-    # 2. 触发后台异步建库，不阻塞前端响应
-    retriever = get_retriever()
+    # 动态加载对应工作区的 retriever
+    retriever = get_retriever(raw_docs_path=docs_dir, vector_db_path=vector_db_path)
     asyncio.create_task(retriever.aingest_documents())
 
-    return {"status": "success", "message": f"{file.filename} 上传成功，后台正在解析建库"}
+    return {"status": "success", "message": "上传成功，后台正在解析建库"}
 
 
-# 🚨 新增：文献删除与缓存清理接口
 @router.delete("/docs/{filename}", summary="删除文献并重建索引")
-async def delete_document(filename: str):
-    file_path = os.path.join("data/raw_docs", filename)
+async def delete_document(filename: str, workspace_id: str):
+    docs_dir = f"data/{workspace_id}/raw_docs"
+    vector_db_path = f"data/{workspace_id}/vector_db/faiss_index"
+
+    file_path = os.path.join(docs_dir, filename)
     if os.path.exists(file_path):
         os.remove(file_path)
 
-        # 清理旧索引目录
-        index_dir = "data/vector_db/faiss_index"
-        if os.path.exists(index_dir):
-            shutil.rmtree(index_dir)
+        if os.path.exists(vector_db_path):
+            shutil.rmtree(vector_db_path)
 
-        # 清理同级缓存文件
         for ext in ["_bm25.pkl", "_kv_store.pkl"]:
-            cache_file = index_dir + ext
+            cache_file = vector_db_path + ext
             if os.path.exists(cache_file):
                 os.remove(cache_file)
 
-        # 触发后台重新建库
-        retriever = get_retriever()
+        retriever = get_retriever(raw_docs_path=docs_dir, vector_db_path=vector_db_path)
         asyncio.create_task(retriever.aingest_documents())
 
-        return {"status": "success", "message": "删除成功，索引正在后台重建"}
+        return {"status": "success"}
 
     raise HTTPException(status_code=404, detail="文件不存在")

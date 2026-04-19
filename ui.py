@@ -1,3 +1,4 @@
+# ui.py
 import streamlit as st
 import os
 import requests
@@ -7,11 +8,6 @@ import time
 # --- 全局 API 与路径配置 ---
 API_BASE_URL = "http://127.0.0.1:8000/api/v1"
 STREAM_API_URL = f"{API_BASE_URL}/research/stream"
-# 仅用于前端展示列表（读权限），写权限已全部移交后端 API
-DOCS_DIR = os.path.join("data", "raw_docs")
-
-# 确保前端读取目录存在（防报错）
-os.makedirs(DOCS_DIR, exist_ok=True)
 
 # --- 页面基础配置 ---
 st.set_page_config(
@@ -73,47 +69,90 @@ st.markdown("""
 
 # --- 界面标题区域 ---
 st.title("🔬 Depth Research Agent")
-st.caption("您的解耦式、可插拔通用深度研究智能体引擎 (支持全网联邦检索)")
+st.caption("您的解耦式、可插拔通用深度研究智能体引擎 (多工作区隔离版本)")
 st.divider()
 
 # ==========================================
-# 侧边栏：干净整洁的文献库管理 (API 解耦版)
+# 获取与配置工作区映射表 (Domain Registry)
 # ==========================================
+try:
+    # 动态拉取注册表，防止本地未预热
+    workspaces = requests.get(f"{API_BASE_URL}/workspaces").json()
+except Exception:
+    workspaces = {"workspace_1": {"display_name": "系统尚未就绪，请检查后端"}}
+
+ws_ids = list(workspaces.keys())
+
+
+def format_ws(ws_id):
+    # 下拉菜单显示 AI 嗅探后的高大上名称
+    return workspaces[ws_id].get("display_name", ws_id)
+
+
 with st.sidebar:
-    st.header("📚 本地知识核心")
-    st.markdown("上传或管理您的专属 PDF 学术文献。")
+    st.header("🗂️ 领域隔离区")
+
+    # 🚨 核心：选择工作区
+    selected_ws = st.selectbox("当前活跃研究区", options=ws_ids, format_func=format_ws)
+
+    # 🚨 核心：新建工作区
+    if st.button("➕ 建立新研究区", use_container_width=True):
+        res = requests.post(f"{API_BASE_URL}/workspaces").json()
+        st.session_state.current_ws = res["workspace_id"]
+        st.session_state.chat_history = [
+            {"role": "assistant", "name": "System",
+             "content": "✨ 全新物理隔离区创建成功！\n\n请在左侧上传该领域的首篇文献，我将在后台默默分析并为您正式命名该领域。"}
+        ]
+        st.rerun()
+
+    # 监控工作区切换，无缝清空上一个领域的上下文记忆，防止串味
+    if "current_ws" not in st.session_state:
+        st.session_state.current_ws = selected_ws
+
+    if st.session_state.current_ws != selected_ws:
+        st.session_state.current_ws = selected_ws
+        st.session_state.chat_history = [
+            {"role": "assistant", "name": "System",
+             "content": f"✅ 已无缝切换至：**{format_ws(selected_ws)}**。\n\n当前处于物理隔离的沙盒环境，请输入您的研究问题。"}
+        ]
+        st.rerun()
+
+    st.divider()
+    st.header("📚 本领域专属文献")
+    st.markdown("上传或管理当前隔离区的文献。")
+
+    # 🚨 动态匹配当前工作区的物理目录
+    DOCS_DIR = os.path.join("data", selected_ws, "raw_docs")
+    os.makedirs(DOCS_DIR, exist_ok=True)
 
     # 1. 丝滑上传文件组件
     uploaded_files = st.file_uploader(
         "➕ 挂载新文献",
         type=["pdf"],
         accept_multiple_files=True,
-        help="上传新的 PDF，系统将通过后端 API 自动异步解析建库。"
+        help="上传新的 PDF，系统将自动划分到当前沙盒区。"
     )
 
     if uploaded_files:
-        with st.spinner("正在安全传输至后端并启动建库..."):
+        with st.spinner("正在传输并启动后台静默分析..."):
             for file in uploaded_files:
                 files = {"file": (file.name, file.getvalue(), "application/pdf")}
                 try:
-                    # 🚨 替换旧版操作：呼叫 FastAPI 的 Upload 接口
-                    requests.post(f"{API_BASE_URL}/docs/upload", files=files)
+                    # 🚨 附带工作区 ID 调用
+                    requests.post(f"{API_BASE_URL}/docs/upload", files=files, data={"workspace_id": selected_ws})
                 except Exception as e:
                     st.error(f"传输失败: {e}")
 
-        # ✅ 使用 Toast 替代 success，防止页面重载时闪烁，体验极佳
-        st.toast("✅ 成功挂载文献！后台正在建立索引。")
-        time.sleep(0.6)  # 短暂延迟，让视觉停留
+        st.toast("✅ 文献就绪！后台嗅探与建库已开启。")
+        time.sleep(0.6)
         st.rerun()
 
-    st.divider()
-
     # 2. 已有文献列表与对齐修复
-    st.subheader("当前已挂载文献")
+    st.subheader("已挂载文献 (当前区)")
     current_files = [f for f in os.listdir(DOCS_DIR) if f.endswith(".pdf")] if os.path.exists(DOCS_DIR) else []
 
     if not current_files:
-        st.info("文献库当前为空。")
+        st.info("当前研究区暂无文献。")
     else:
         with st.expander(f"查看文献目录 (共 {len(current_files)} 篇)", expanded=True):
             for file in current_files:
@@ -123,8 +162,8 @@ with st.sidebar:
 
                 if col2.button("🗑️", key=f"del_{file}", help=f"删除 {file}"):
                     try:
-                        # 🚨 替换旧版操作：呼叫 FastAPI 的 Delete 接口
-                        requests.delete(f"{API_BASE_URL}/docs/{file}")
+                        # 🚨 附带工作区 ID 调用删除
+                        requests.delete(f"{API_BASE_URL}/docs/{file}?workspace_id={selected_ws}")
                         st.toast(f"🗑️ 已移除 {file} 并触发缓存清理！")
                         time.sleep(0.6)
                         st.rerun()
@@ -142,10 +181,8 @@ def render_pipeline_html(active_node: str) -> str:
     items = []
     for n in nodes:
         if n == active_node:
-            # 激活节点：高亮色 + 粗体
             items.append(f"<span style='color: #009688; font-weight: bold;'>🟢 {n}</span>")
         else:
-            # 未激活节点：置灰
             items.append(f"<span style='color: #adb5bd;'>⚪ {n}</span>")
 
     pipeline_str = " ➔ ".join(items)
@@ -185,7 +222,8 @@ if user_input := st.chat_input("在此输入您的研究问题"):
 
             payload = {
                 "query": user_input,
-                "chat_history": st.session_state.chat_history[:-1]  # 传给后端历史记录
+                "workspace_id": selected_ws,  # 🚨 附带工作区 ID 驱动全局计算流转
+                "chat_history": st.session_state.chat_history[:-1]
             }
 
             final_report = ""
@@ -203,7 +241,7 @@ if user_input := st.chat_input("在此输入您的研究问题"):
 
                             if data_str == "[DONE]":
                                 end_time = time.time()
-                                pipeline_placeholder.empty()  # 完成后隐藏流水线图
+                                pipeline_placeholder.empty()
                                 status_box.update(label=f"✅ 深度研究完成！总耗时: {end_time - start_time:.1f}s",
                                                   state="complete", expanded=False)
                                 break
@@ -218,11 +256,9 @@ if user_input := st.chat_input("在此输入您的研究问题"):
                                 node = event.get("node")
                                 state = event.get("state_update", {})
 
-                                # 1. 动态更新流水线可视化图
                                 if node in ["Planner", "Researcher", "Writer", "Reviewer", "DailyQA"]:
                                     pipeline_placeholder.markdown(render_pipeline_html(node), unsafe_allow_html=True)
 
-                                # 2. 差异化高亮日志输出，拒绝杂乱无章
                                 if node == "Supervisor":
                                     next_agent = state.get("next", "未知")
                                     if next_agent != "FINISH":
@@ -234,7 +270,7 @@ if user_input := st.chat_input("在此输入您的研究问题"):
                                         f"🗓️ **[Planner]** 庖丁解牛，已规划出 {len(plan)} 个独立研究步骤。")
                                 elif node == "Researcher":
                                     log_container.warning(
-                                        f"🔍 **[Researcher]** 正在混合双擎 (本地 RAG + 全网 MCP) 挖掘核心证据...")
+                                        f"🔍 **[Actor Cluster]** 正在混合双擎 (本地 RAG + 全网 MCP) 并发挖掘证据...")
                                 elif node == "Reviewer":
                                     log_container.error(f"⚖️ **[Reviewer]** 启动严苛审查，核对逻辑严密性与事实出处...")
                                 elif node == "Writer":
@@ -255,11 +291,8 @@ if user_input := st.chat_input("在此输入您的研究问题"):
                 status_box.update(label="系统异常", state="error")
                 st.error(f"发生未知错误: {str(e)}")
 
-        # 状态流转结束后，将大模型最终产出的学术报告进行优雅渲染
         if final_report:
             st.markdown(final_report)
-
-            # 🚨 核心 Bug 修复：记录最新说话的 Agent 是 Writer，保证历史对话连通性
             st.session_state.chat_history.append({
                 "role": "assistant",
                 "name": "Writer",

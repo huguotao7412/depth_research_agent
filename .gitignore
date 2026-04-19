@@ -22,11 +22,9 @@ env/
 .vscode/
 
 # === 本地知识库与缓存数据 ===
-data/vector_db/
-data/raw_docs/
+/data/
 *.pdf
 
 # 忽略临时测试脚本产生的垃圾文件
-.pytest_cache/
-/data/raw_docs_parsed/
-/bge-small-zh-v1.5/
+
+
