@@ -163,7 +163,7 @@ with st.sidebar:
                 if col2.button("🗑️", key=f"del_{file}", help=f"删除 {file}"):
                     try:
                         # 🚨 附带工作区 ID 调用删除
-                        requests.delete(f"{API_BASE_URL}/docs/{file}?workspace_id={selected_ws}")
+                        requests.delete(f"{API_BASE_URL}/docs/{file}", params={"workspace_id": selected_ws})
                         st.toast(f"🗑️ 已移除 {file} 并触发缓存清理！")
                         time.sleep(0.6)
                         st.rerun()

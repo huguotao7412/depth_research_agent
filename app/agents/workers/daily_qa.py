@@ -7,6 +7,7 @@ from app.core.llm_factory import get_llm
 
 def daily_qa_node(state: ResearchState) -> dict:
     print("\n⚡ [DailyQA] 触发快系统，正在使用低延迟模型极速响应...")
+    session_summary = state.get("session_summary", "")
 
     # 调用响应速度极快的 fast 模型 (低 Temperature 保证回答的客观准确性)
     llm = get_llm(model_type="main", temperature=0.3)
@@ -17,6 +18,8 @@ def daily_qa_node(state: ResearchState) -> dict:
                    "你不需要进行长篇大论，也不需要捏造文献引用，力求精准和极速即可。"),
         MessagesPlaceholder(variable_name="messages")
     ])
+    if session_summary:
+        prompt += f"\n\n🧠 【前置对话情境摘要】:\n{session_summary}\n(请在理解用户意图和分配任务时，务必参考上述背景历史)"
 
     chain = prompt | llm
 

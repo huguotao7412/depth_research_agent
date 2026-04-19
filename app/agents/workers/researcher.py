@@ -128,16 +128,27 @@ async def researcher_node(state: ResearchState) -> dict:
     # ==========================================
     # ⚡ 核心改造：并行执行逻辑 (Concurrency Optimization)
     # ==========================================
-    # 🚨 关键修复：判断是否为 Reviewer 打回重做阶段
     messages = state.get("messages", [])
-    has_been_reviewed = any(msg.name == "Reviewer" for msg in messages)
+    last_planner_idx = -1
+    last_reviewer_idx = -1
 
-    if has_been_reviewed:
+    for i, msg in enumerate(messages):
+        if hasattr(msg, "name"):
+            if msg.name == "Planner":
+                last_planner_idx = i
+            elif msg.name == "Reviewer":
+                last_reviewer_idx = i
+
+    # 如果最后一个 Reviewer 出现的位置，在最后一个 Planner 出现的位置之后，
+    # 说明当前的流程是 Planner做完 -> Writer写完 -> Reviewer打回。这是一个【补充检索】循环。
+    is_review_loop = last_reviewer_idx > last_planner_idx
+
+    if is_review_loop:
         print("⚠️ [Actor Cluster] 检测到 Reviewer 审查打回，进入【精准补充检索】模式...")
-        # 补充检索模式下，不再执行 Planner 的全量大纲，而是直接执行 Supervisor 针对性下发的补充指令
+        # 补充检索模式下，直接执行 Supervisor 针对性下发的单条补充指令
         tasks = [task_desc]
     else:
-        # 初次执行，走 Planner 拆解的并发大纲
+        # 首轮执行，走 Planner 拆解的多 Actor 并发大纲
         tasks = state.get("research_plan", [])
         if not tasks:
             tasks = [task_desc]

@@ -7,7 +7,7 @@ from app.core.state import ResearchState
 def create_supervisor_node(llm: ChatOpenAI):
     def supervisor_node(state: ResearchState) -> dict:
         print("\n👔 [Supervisor] 正在审视全局进度，思考下一步调度...")
-
+        session_summary = state.get("session_summary", "")
         messages = state.get("messages", [])
         last_agent = messages[-1].name if messages and hasattr(messages[-1], "name") else "User"
 
@@ -35,6 +35,9 @@ def create_supervisor_node(llm: ChatOpenAI):
         ✅ 【结束条件 (FINISH)】:
         只有当 `DailyQA` 刚执行完毕，或者 `Reviewer` 的审查意见中明确包含 'APPROVED' 时，才能选择 'FINISH' 结束！
         """
+
+        if session_summary:
+            system_prompt += f"\n\n🧠 【前置对话情境摘要】:\n{session_summary}\n(请在理解用户意图和分配任务时，务必参考上述背景历史)"
 
         prompt = ChatPromptTemplate.from_messages([
             ("system", system_prompt),

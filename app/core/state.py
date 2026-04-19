@@ -24,3 +24,5 @@ class ResearchState(TypedDict):
     collected_data: Annotated[List[dict], operator.add]
     review_comments: Annotated[List[str], operator.add]
     final_draft: str
+
+    session_summary: str

@@ -1,11 +1,12 @@
+# app/api/routes.py
 import os
 import shutil
 import asyncio
 import json
-import traceback  # 🚨 新增：用于打印异常堆栈
-from fastapi import APIRouter, HTTPException, UploadFile, File,Form
+import traceback
+from fastapi import APIRouter, HTTPException, UploadFile, File, Form
 from fastapi.responses import StreamingResponse
-from fastapi.encoders import jsonable_encoder # 🚨 新增：防止 JSON 序列化报错
+from fastapi.encoders import jsonable_encoder
 from pydantic import BaseModel, Field
 from typing import List, Optional
 from app.agents.graph import build_multi_agent_graph
@@ -19,7 +20,6 @@ router = APIRouter()
 llm = get_llm(model_type="main", temperature=0.0)
 research_agent = build_multi_agent_graph(llm)
 
-# 🚨 1. 暴露工作区管理 API
 @router.get("/workspaces", summary="获取所有工作区")
 def list_workspaces():
     return get_workspaces()
@@ -47,24 +47,16 @@ class ResearchResponse(BaseModel):
 
 @router.post("/research", response_model=ResearchResponse, summary="提交深度研究任务")
 async def run_research(request: ResearchRequest):
-    # (省略普通接口代码，保持你之前的修改即可)
     pass
 
 
 @router.post("/research/stream", summary="流式提交深度研究任务 (SSE)")
 async def run_research_stream(request: ResearchRequest):
     async def event_generator():
-        messages_input = []
-        for msg in request.chat_history:
-            if msg["role"] == "user":
-                messages_input.append(HumanMessage(content=msg["content"]))
-            else:
-                agent_name = msg.get("name", "Assistant")
-                messages_input.append(AIMessage(content=msg["content"], name=agent_name))
+        # 🚨 核心改造 1：启用 Checkpointer 后，无需手动拼接全量 chat_history
+        # 我们只向图引擎喂入用户当次发送的最新一条 Query 即可
+        messages_input = [HumanMessage(content=request.query)]
 
-        messages_input.append(HumanMessage(content=request.query))
-
-        # 🚨 3. 核心解耦：根据前端传来的 workspace_id 动态拼装路径
         inputs = {
             "user_query": request.query,
             "messages": messages_input,
@@ -72,9 +64,21 @@ async def run_research_stream(request: ResearchRequest):
             "vector_db_path": f"data/{request.workspace_id}/vector_db/faiss_index"
         }
 
+        # 🚨 核心改造 2：使用 workspace_id 作为 thread_id 激活沙盒记忆
+        thread_id = request.workspace_id if request.workspace_id else "default_thread"
+        config = {
+            "configurable": {"thread_id": thread_id},
+            "recursion_limit": 50
+        }
+
         try:
-            async for output in research_agent.astream(inputs, config={"recursion_limit": 50}):
+            # 🚨 核心改造 3：将带有 thread_id 的 config 传入 astream
+            async for output in research_agent.astream(inputs, config=config):
                 for node_name, state_update in output.items():
+                    # 拦截 MemoryManager 节点的流转信息，让其在后台静默运行，不干扰前端 UI
+                    if node_name == "MemoryManager":
+                        continue
+
                     event_data = {"node": node_name, "state_update": state_update}
                     yield f"data: {json.dumps(jsonable_encoder(event_data), ensure_ascii=False)}\n\n"
             yield "data: [DONE]\n\n"
@@ -85,8 +89,6 @@ async def run_research_stream(request: ResearchRequest):
     return StreamingResponse(event_generator(), media_type="text/event-stream")
 
 
-# 🚨 新增：文献上传与异步建库接口
-# 🚨 4. 上传与删除接口绑定 workspace_id
 @router.post("/docs/upload", summary="上传文献并异步建库")
 async def upload_document(file: UploadFile = File(...), workspace_id: str = Form(...)):
     docs_dir = f"data/{workspace_id}/raw_docs"
@@ -97,7 +99,6 @@ async def upload_document(file: UploadFile = File(...), workspace_id: str = Form
     with open(file_path, "wb") as f:
         f.write(await file.read())
 
-    # 动态加载对应工作区的 retriever
     retriever = get_retriever(raw_docs_path=docs_dir, vector_db_path=vector_db_path)
     asyncio.create_task(retriever.aingest_documents())
 
