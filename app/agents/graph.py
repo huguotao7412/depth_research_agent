@@ -27,7 +27,7 @@ def build_multi_agent_graph(llm):
     workflow.add_edge("Researcher", "Supervisor")
     workflow.add_edge("Reviewer", "Supervisor")
     workflow.add_edge("Writer", "Supervisor")
-    workflow.add_edge("DailyQA", "Supervisor")
+    workflow.add_edge("DailyQA", "MemoryManager")
 
     workflow.add_edge(START, "Supervisor")
 

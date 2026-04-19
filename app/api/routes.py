@@ -60,6 +60,7 @@ async def run_research_stream(request: ResearchRequest):
         inputs = {
             "user_query": request.query,
             "messages": messages_input,
+            "workspace_id": request.workspace_id,
             "raw_docs_path": f"data/{request.workspace_id}/raw_docs",
             "vector_db_path": f"data/{request.workspace_id}/vector_db/faiss_index"
         }

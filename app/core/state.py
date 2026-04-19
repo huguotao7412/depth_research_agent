@@ -4,7 +4,10 @@ from typing import Annotated, Sequence, TypedDict, List
 from langchain_core.messages import BaseMessage
 from langgraph.graph.message import add_messages
 from protocols.a2a.schemas import AgentRole, AgentTaskInstruction
+from pydantic import BaseModel
 
+class Instruction(BaseModel):
+    task_description: str
 
 class ResearchState(TypedDict):
     # 核心对话与执行历史
@@ -24,5 +27,7 @@ class ResearchState(TypedDict):
     collected_data: Annotated[List[dict], operator.add]
     review_comments: Annotated[List[str], operator.add]
     final_draft: str
+
+    workspace_id: str
 
     session_summary: str

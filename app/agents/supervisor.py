@@ -37,7 +37,11 @@ def create_supervisor_node(llm: ChatOpenAI):
         """
 
         if session_summary:
-            system_prompt += f"\n\n🧠 【前置对话情境摘要】:\n{session_summary}\n(请在理解用户意图和分配任务时，务必参考上述背景历史)"
+            system_prompt += (
+                "\n\n🧠 【前置对话情境摘要】:\n"
+                f"{session_summary}\n"
+                "(请在理解用户意图和决定下一步动作时，务必参考上述历史背景，不要重复提问已知信息)\n"
+            )
 
         prompt = ChatPromptTemplate.from_messages([
             ("system", system_prompt),
