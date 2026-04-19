@@ -4,6 +4,7 @@ from pydantic import BaseModel, Field
 from app.core.state import ResearchState
 from app.core.llm_factory import get_llm
 from app.core.memory_store import update_profile, add_experience
+from langchain_core.output_parsers import JsonOutputParser
 
 class MemoryExtraction(BaseModel):
     new_preferences: dict = Field(default_factory=dict, description="提取的结构化偏好(如核心算法、输出格式要求等)，以字典形式返回")
@@ -22,19 +23,29 @@ async def memory_manager_node(state: ResearchState) -> dict:
     try:
         extractor_llm = get_llm(model_type="main", temperature=0.1)
 
-        # 只提取最近几轮对话，避免过度发散
         recent_context = "\n".join(
             [f"{'User' if isinstance(m, HumanMessage) else 'AI'}: {str(m.content)[:300]}" for m in messages[-4:]])
 
+        # 🚨 核心改造 1：实例化 JSON 解析器
+        parser = JsonOutputParser(pydantic_object=MemoryExtraction)
+
+        # 🚨 核心改造 2：在 Prompt 中强行注入 JSON 格式要求
         extract_prompt = (
             "你是一个学术 Agent 的记忆提取中枢。请分析最近的对话，提取以下信息：\n"
             "1. 用户是否有明确的研究偏好、关注的算法或格式要求？(提取入 new_preferences)\n"
-            "2. 用户是否有对之前输出的批评、纠正或要求避坑的地方？(提取入 lessons_learned)\n"
-            f"近期对话记录：\n{recent_context}"
+            "2. 用户是否有对之前输出的批评、纠正或要求避坑的地方？(提取入 lessons_learned)\n\n"
+            f"近期对话记录：\n{recent_context}\n\n"
+            "【强制输出规范】\n"
+            f"{parser.get_format_instructions()}\n"
+            "请直接输出合法的 JSON 字符串，不要包含任何 Markdown 标记（如 ```json），不要输出任何其他解释性文字！"
         )
 
-        structured_llm = extractor_llm.with_structured_output(MemoryExtraction)
-        extraction: MemoryExtraction = await structured_llm.ainvoke(extract_prompt)
+        # 🚨 核心改造 3：使用标准的链式调用 (Prompt -> LLM -> Parser)
+        chain = extractor_llm | parser
+
+        # 解析出来的是一个字典，我们把它转回 pydantic 对象方便后续调用
+        parsed_dict = await chain.ainvoke([HumanMessage(content=extract_prompt)])
+        extraction = MemoryExtraction(**parsed_dict)
 
         if extraction.new_preferences:
             update_profile(workspace_id, extraction.new_preferences)
@@ -44,7 +55,7 @@ async def memory_manager_node(state: ResearchState) -> dict:
             print(f"   [+] 成功存入隐式经验: {len(extraction.lessons_learned)} 条")
 
     except Exception as e:
-        print(f"   [⚠️] 长期记忆提炼跳过 (模型输出不规范或无新信息): {e}")
+        print(f"   [⚠️] 长期记忆提炼跳过 (无新信息或解析失败): {e}")
 
     # ==========================================
     # 🧹 短期记忆防爆与压缩 (Short-term Session)
