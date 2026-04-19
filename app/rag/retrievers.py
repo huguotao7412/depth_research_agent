@@ -50,6 +50,7 @@ class OmniRetriever:
 
         self.byte_store = InMemoryByteStore()
         self.id_key = "doc_id"
+        self._index_lock = asyncio.Lock()
 
     def _extract_elements(self, md_text: str, source_file: str) -> dict:
         elements = {"texts": [], "tables": []}
@@ -238,7 +239,10 @@ class OmniRetriever:
             self.multi_retriever = None
 
         if self.multi_retriever is None:
-            await self.aload_or_build_index()
+            async with self._index_lock:
+                # 拿到锁后再次检查，如果已经被先拿到锁的协程加载了，就直接跳过
+                if self.multi_retriever is None:
+                    await self.aload_or_build_index()
 
         # FAISS & BM25 双路召回
         faiss_sub = self.vector_store.similarity_search(query, k=10)

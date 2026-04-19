@@ -128,11 +128,19 @@ async def researcher_node(state: ResearchState) -> dict:
     # ==========================================
     # ⚡ 核心改造：并行执行逻辑 (Concurrency Optimization)
     # ==========================================
-    # 从状态机中获取 Planner 拆解好的子任务列表
-    tasks = state.get("research_plan", [])
-    if not tasks:
-        # 兜底逻辑：如果 Planner 没有给出明确的分解计划，则按原始大任务执行
+    # 🚨 关键修复：判断是否为 Reviewer 打回重做阶段
+    messages = state.get("messages", [])
+    has_been_reviewed = any(msg.name == "Reviewer" for msg in messages)
+
+    if has_been_reviewed:
+        print("⚠️ [Actor Cluster] 检测到 Reviewer 审查打回，进入【精准补充检索】模式...")
+        # 补充检索模式下，不再执行 Planner 的全量大纲，而是直接执行 Supervisor 针对性下发的补充指令
         tasks = [task_desc]
+    else:
+        # 初次执行，走 Planner 拆解的并发大纲
+        tasks = state.get("research_plan", [])
+        if not tasks:
+            tasks = [task_desc]
 
     # 定义单个 Actor 的运行生命周期
     async def run_single_actor(single_task_desc: str, index: int):
