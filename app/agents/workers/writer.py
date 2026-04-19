@@ -40,8 +40,14 @@ def writer_node(state: ResearchState) -> dict:
     # 2. 获取 Reviewer 的反馈意见（如果是被打回重写的）
     messages = state.get("messages", [])
     reviewer_feedback = "无"
-    if messages and hasattr(messages[-1], 'name') and messages[-1].name == "Reviewer":
-        reviewer_feedback = messages[-1].content
+
+    for m in reversed(messages):
+        if getattr(m, 'name', '') == "Reviewer":
+            reviewer_feedback = m.content
+            break
+        elif getattr(m, 'name', '') == "Writer":
+            # 如果逆向先找到了自己(Writer)的历史，说明这一轮是全新的，没有经过 Reviewer 打回
+            break
 
     # 3. 动态构建系统提示词
     system_prompt = (

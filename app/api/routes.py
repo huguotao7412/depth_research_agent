@@ -58,7 +58,6 @@ async def run_research_stream(request: ResearchRequest):
         messages_input = [HumanMessage(content=request.query)]
 
         inputs = {
-            "user_query": request.query,
             "messages": messages_input,
             "workspace_id": request.workspace_id,
             "raw_docs_path": f"data/{request.workspace_id}/raw_docs",
