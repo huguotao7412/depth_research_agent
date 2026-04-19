@@ -136,6 +136,8 @@ with st.sidebar:
 # 辅助函数：绘制高颜值 Agent 流水线
 # ==========================================
 def render_pipeline_html(active_node: str) -> str:
+    if active_node == "DailyQA":
+        return "<div class='pipeline-container'>⚡ <b>动态路由 (快系统):</b> &nbsp;&nbsp; <span style='color: #FF9900; font-weight: bold;'>🟢 极速问答引擎 (DailyQA)</span> ➔ 结束</div>"
     nodes = ["Planner", "Researcher", "Writer", "Reviewer"]
     items = []
     for n in nodes:
@@ -217,7 +219,7 @@ if user_input := st.chat_input("在此输入您的研究问题"):
                                 state = event.get("state_update", {})
 
                                 # 1. 动态更新流水线可视化图
-                                if node in ["Planner", "Researcher", "Writer", "Reviewer"]:
+                                if node in ["Planner", "Researcher", "Writer", "Reviewer", "DailyQA"]:
                                     pipeline_placeholder.markdown(render_pipeline_html(node), unsafe_allow_html=True)
 
                                 # 2. 差异化高亮日志输出，拒绝杂乱无章
@@ -237,6 +239,9 @@ if user_input := st.chat_input("在此输入您的研究问题"):
                                     log_container.error(f"⚖️ **[Reviewer]** 启动严苛审查，核对逻辑严密性与事实出处...")
                                 elif node == "Writer":
                                     log_container.markdown(f"> 📝 **[Writer]** 正在汇总所有事实数据，奋笔疾书...")
+                                    final_report = state.get("final_draft", "")
+                                elif node == "DailyQA":
+                                    log_container.success(f"⚡ **[DailyQA]** 成功短路复杂流程，正在通过快模型极速回复...")
                                     final_report = state.get("final_draft", "")
 
                             except json.JSONDecodeError:

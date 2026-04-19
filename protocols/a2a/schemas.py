@@ -4,7 +4,7 @@ from pydantic import BaseModel, Field, model_validator
 from typing import List, Literal, Optional, Any
 
 # 定义系统内所有的 Agent 角色
-AgentRole = Literal["Planner", "Researcher", "Reviewer", "Writer", "FINISH"]
+AgentRole = Literal["Planner", "Researcher", "Reviewer", "Writer", "DailyQA", "FINISH"]
 
 class AgentTaskInstruction(BaseModel):
     """Supervisor 发送给 Worker 的标准化任务指令"""
