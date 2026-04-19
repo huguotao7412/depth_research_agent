@@ -230,7 +230,7 @@ if user_input := st.chat_input("在此输入您的研究问题"):
             start_time = time.time()
 
             try:
-                response = requests.post(STREAM_API_URL, json=payload, stream=True)
+                response = requests.post(STREAM_API_URL, json=payload, stream=True, timeout=600)
                 response.raise_for_status()
 
                 for line in response.iter_lines():

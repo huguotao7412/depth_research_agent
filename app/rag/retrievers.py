@@ -56,6 +56,7 @@ class OmniRetriever:
         self.byte_store = InMemoryByteStore()
         self.id_key = "doc_id"
         self._index_lock = asyncio.Lock()
+        self._compress_semaphore = asyncio.Semaphore(3)
 
     def _extract_elements(self, md_text: str, source_file: str) -> dict:
         elements = {"texts": [], "tables": []}
@@ -258,16 +259,26 @@ class OmniRetriever:
             print(f"    [❌ Rerank 网络异常]: {str(e)}，降级返回原顺序。")
             return docs[:top_n]
 
-    def _compress_document(self, query: str, doc: Document) -> Document | None:
-        if len(doc.page_content) < 300: return doc
-        prompt = ChatPromptTemplate.from_template("从片段中提取回答【{query}】的核心信息，无关直接回复NONE：\n{context}")
-        try:
-            summary = (prompt | self.cheap_llm | StrOutputParser()).invoke(
-                {"query": query, "context": doc.page_content[:4000]}).strip()
-            return None if summary.upper().startswith("NONE") else Document(page_content=f"[提炼] {summary}",
-                                                                            metadata=doc.metadata)
-        except:
-            return Document(page_content=doc.page_content[:1500] + "...", metadata=doc.metadata)
+    async def _acompress_document(self, query: str, doc: Document) -> Document | None:
+        if len(doc.page_content) < 300:
+            return doc
+
+        async with self._compress_semaphore:  # 🚨 使用信号量限流
+            prompt = ChatPromptTemplate.from_template(
+                "从片段中提取回答【{query}】的核心信息，无关直接回复NONE：\n{context}")
+            try:
+                # 使用 ainvoke 进行非阻塞异步调用
+                result = await (prompt | self.cheap_llm | StrOutputParser()).ainvoke(
+                    {"query": query, "context": doc.page_content[:4000]}
+                )
+                summary = result.strip()
+                return None if summary.upper().startswith("NONE") else Document(
+                    page_content=f"[提炼] {summary}",
+                    metadata=doc.metadata
+                )
+            except Exception as e:
+                print(f"⚠️ [提纯异常]: {e}")
+                return Document(page_content=doc.page_content[:1500] + "...", metadata=doc.metadata)
 
     async def aretrieve(self, query: str, top_k: int = 4) -> List[Document]:
         if self._is_index_outdated():
@@ -313,12 +324,12 @@ class OmniRetriever:
         strict_top_docs = await self._rerank_documents(query, candidate_docs, top_n=top_k)
 
         # ================= 并行大模型提纯 =================
-        compressed_docs = []
-        with concurrent.futures.ThreadPoolExecutor(max_workers=min(len(strict_top_docs), 5)) as executor:
-            future_to_doc = {executor.submit(self._compress_document, query, doc): doc for doc in strict_top_docs}
-            for future in concurrent.futures.as_completed(future_to_doc):
-                if (comp_doc := future.result()) is not None:
-                    compressed_docs.append(comp_doc)
+        print(f"🧠 [OmniRetriever] 正在并行提纯核心证据 (并发限制: 3)...")
+        tasks = [self._acompress_document(query, doc) for doc in strict_top_docs]
+
+        # 并发执行并过滤掉 None 结果
+        results = await asyncio.gather(*tasks)
+        compressed_docs = [d for d in results if d is not None]
 
         print(f"    [✨ 提纯完成]: 针对 '{query}' 有效保留 {len(compressed_docs)} 段核心证据。")
         if not compressed_docs and strict_top_docs:

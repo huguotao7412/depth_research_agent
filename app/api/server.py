@@ -2,30 +2,23 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.api.routes import router
-from protocols.mcp.client import get_mcp_tools_and_client
-from app.rag.retrievers import get_retriever
 from contextlib import asynccontextmanager
+from protocols.mcp.client import mcp_lifecycle_manager
 
 from app.core.workspace import init_workspaces # 🚨 引入工作区初始化模块
 
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    print("\n🚀 [Lifespan] 后端服务启动中：正在后台预热长耗时组件...")
+    print("\n🚀 [Lifespan] 后端服务启动中...")
+    init_workspaces()
 
-    init_workspaces() # 🚨 启动时确保全局注册表存在
+    # 🚨 核心修复：使用 async with 保证子进程生命周期
+    async with mcp_lifecycle_manager() as (mcp_client, mcp_tools):
+        yield  # 此时应用正在运行，MCP 进程存活
 
-    # 1. 预热 MCP 客户端 (瞬间拉起 Node.js 进程)
-    try:
-        await get_mcp_tools_and_client()
-        print("✅ [Lifespan] MCP 联邦检索服务器预加载完成！")
-    except Exception as e:
-        print(f"⚠️ [Lifespan] MCP 预热失败，将在首次检索时重试: {e}")
-
-    # 🚨 2. 取消对本地 FAISS 的启动强制预热，因为我们现在有无限个潜在工作区。
-    # Retriever 工厂会在用户首次提问或上传文献时，按需毫秒级拉起对应工作区的内存索引。
-
-    yield
-    print("\n🛑 [Lifespan] 后端服务正在关闭...")
+    # 退出 yield 后，mcp_lifecycle_manager 会自动清理进程
+    print("\n🛑 [Lifespan] 后端服务已平滑关闭。")
 
 def create_app() -> FastAPI:
     # 1. 实例化 FastAPI

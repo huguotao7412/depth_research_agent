@@ -1,63 +1,62 @@
-# 🔬 DepthResearch-Agent | 下一代多智能体深度研究引擎
+# 🔬 DepthResearch-Agent | 准工业级多智能体深度研究引擎
 
 ![Python](https://img.shields.io/badge/Python-3.10%2B-blue?style=for-the-badge&logo=python)
 ![LangGraph](https://img.shields.io/badge/LangGraph-Multi_Agent-FF9900?style=for-the-badge)
 ![FastAPI](https://img.shields.io/badge/FastAPI-Streaming-009688?style=for-the-badge&logo=fastapi)
-![Streamlit](https://img.shields.io/badge/Streamlit-Immersive_UI-FF4B4B?style=for-the-badge&logo=streamlit)
-![DeepSeek](https://img.shields.io/badge/LLM-DeepSeek-black?style=for-the-badge)
-![Kimi](https://img.shields.io/badge/Parser-Kimi_API-purple?style=for-the-badge)
+![FAISS](https://img.shields.io/badge/Memory-FAISS%20%2B%20BM25-009688?style=for-the-badge)
 
-> **还在为堆积如山的 PDF 文献和漫无目的的全网检索发愁吗？**
-> 欢迎来到自动化科研的新纪元。**DepthResearch-Agent** 彻底重塑了学术研究与深度调研的工作流。我们不仅提供了一个工具，更为您配备了一支**不知疲倦、严谨苛刻的虚拟学术团队**。
+> **打破“单次对话”的桎梏，构建真实的虚拟学术团队。**
+> 全新升级的 **DepthResearch-Agent** 不仅是一个 RAG 工具，更是一个具备**物理隔离沙盒**、**长短期双重记忆**、**领域自动嗅探**的自我进化型科研工作站。
 
 ---
 
-## 🔥 核心优势 (Why Choose Us?)
+## 🔥 架构巨变：本次核心升级亮点
 
-传统的大模型应用往往受限于“单脑思考”和“数据幻觉”。DepthResearch-Agent 通过极致的架构设计，为您带来降维打击般的体验：
+我们对底层引擎进行了脱胎换骨的重构，解决了传统大模型应用中“记忆串味”、“长逻辑崩溃”与“无法量化评估”的三大痛点：
 
-* 🧠 **多脑协同，复刻真实学术团队**
-    系统内置五大独立智能体：**主管(Supervisor)**全局调度、**规划师(Planner)**庖丁解牛、**研究员(Researcher)**深度挖掘、**审查员(Reviewer)**严苛把关、**撰稿人(Writer)**落笔生花。各司其职，自我纠错，拒绝“大模型一本正经地胡说八道”。
-* 📡 **本地+全网 混合双擎检索 (RAG + MCP)**
-    本地资料匮乏？不用担心。我们在双路高精度本地召回（FAISS + BM25）的基础上，无缝挂载 **MCP 联邦检索**（Tavily/GitHub）。一旦本地文献不足，Agent 会自动突破边界，进行全网实时追踪。
-* 🎯 **极致无损，PDF 变身“结构化富矿”**
-    抛弃粗糙的开源解析方案。我们深度集成 **Kimi 高精度文档解析**，完美还原复杂学术 PDF 中的表格、多级标题与段落，搭配 BGE-M3 向量模型，确保每一个关键数据都不被遗漏。
-* 🛡️ **零幻觉，字字皆有出处的“铁律”**
-    生成的每一条核心结论，都必须携带清晰的来源标注（精准到具体 PDF 文件名或可点击的网页超链接）。没有证据，绝不编造！
-* ⚡ **全景透明，流式心跳交互 (SSE)**
-    拒绝“黑盒等待”。基于 FastAPI + Streamlit 打造的前后分离架构，实时打印各大智能体的工作心跳与思考轨迹，让您像大 Boss 一样沉浸式看着您的虚拟团队为您冲锋陷阵。
+* 🗂️ **多工作区沙盒与静默领域嗅探 (Domain Sniffer)**
+    告别知识库大杂烩！系统支持无限创建**物理隔离**的研究区。当你上传该领域的第一篇 PDF 时，后台的 Domain Sniffer 会自动抽取摘要，通过轻量级大模型为你**自动命名该研究领域**（如“毫米波雷达生理监测”），实现极致优雅的知识管理。
+* 🧠 **长短期心智双引擎 (Memory Engine)**
+    引入全新的 `MemoryManager` 节点，彻底重构记忆机制：
+    * **短期防爆**：利用滑动窗口与模型异步摘要，彻底释放 Token，防止深远对话上下文撑爆内存。
+    * **长期偏好**：后台静默解析你对 Agent 提出的批评与要求，自动提炼并写入 FAISS 隐式经验库与 JSON 画像。你的每一次纠正，都会让下一次的 `Writer` 节点更加懂你。
+* 🚀 **多脑协同与防无限循环 (Actor Cluster)**
+    主管 (`Supervisor`) 动态进行快慢系统路由。对于复杂指令，由规划师 (`Planner`) 拆解任务，分发给多个 `Researcher`（Actor）**并发执行**混合检索（本地 RAG + 全网 MCP）。我们为 Actor 引入了强硬的递归退出机制，彻底杜绝了工具调用的死循环。
+* 📊 **Ragas 量化体检报告 (Golden Dataset Evaluation)**
+    新增独立的量化评测管道 `evaluate_ragas.py`，支持导入黄金测试集，对 Agent 的**上下文精度 (Context Precision)**、**事实忠诚度 (Faithfulness)** 与 **答案相关性 (Answer Relevance)** 进行多维度机打分，让引擎的每一次迭代都有据可依。
+* ⚡ **极速响应：DailyQA 快系统**
+    面对简单名词解释（如“什么是 ICA 算法”），系统会自动短路复杂的规划和审查流程，直接唤醒低延迟模型极速响应。
 
 ---
 
 ## 🛠 硬核技术栈 (Tech Stack)
 
-本项目采用目前最前沿的 AI 应用开发组合：
-
-- **智能体编排 (Orchestration):** `LangGraph` (基于状态机的循环调度与容错机制)
-- **大模型基座 (LLM Core):** 强推理模型 `DeepSeek` (主节点) + 高性价比模型 `GLM-4-Flash` (规划/提纯节点)
-- **文档解析 (Document Parsing):** `Kimi (Moonshot) API` (长文本/复杂版面异步提取)
-- **混合检索 (Hybrid Retrieval):** `FAISS` (密集向量) + `Rank-BM25` (稀疏词频) + `SiliconFlow BGE-M3` (Rerank 重排序)
-- **外部拓展 (Tooling):** `Model Context Protocol (MCP)` 挂载 Tavily 等全网搜索引擎
-- **高性能后端 (Backend):** `FastAPI` (原生异步处理与 SSE 流式推送)
-- **交互层 (Frontend):** `Streamlit` (极简、专注的交互体验)
+- **核心编排:** `LangGraph` (包含内置 `MemorySaver` 状态机)
+- **多模型基座:** 强推理模型 `DeepSeek` + 高性价比极速模型 `GLM-4-Flash`
+- **解析与存储:** `Kimi API` (异步复杂版面还原) + `FAISS` & `Rank-BM25` (多向量混合召回) + `BGE-M3` (Rerank 重排序)
+- **外部扩展:** 基于 `Model Context Protocol (MCP)` 挂载 Tavily 联邦检索引擎
+- **交互与通信:** `FastAPI` (原生异步处理与 SSE 流式心跳) + `Streamlit` (极简多沙盒驾驶舱)
 
 ---
 
-## 📂 优雅的架构设计
+## 📂 项目结构全景
 
 ```text
 depth_research_agent/
 ├── app/                        
-│   ├── api/                    # FastAPI 核心接口 (支持 SSE 流式心跳)
-│   ├── core/                   # 全局状态机 (ResearchState) 与 LLM 工厂
-│   ├── agents/                 # LangGraph 多智能体工作流引擎 (Supervisor等5大节点)
-│   └── rag/                    # OmniRetriever (并发提纯/RRF融合) 与 Kimi 解析器
-├── data/                       # 您的专属知识保险箱 (本地化隔离)
-│   ├── raw_docs/               # PDF 原文库
-│   ├── raw_docs_parsed/        # 结构化 Markdown 数据
-│   └── vector_db/              # 向量、词典与键值对缓存
-├── protocols/                  # A2A (Agent to Agent) 通信协议与 MCP 外部接口
-├── main.py                     # API 引擎点火开关
+│   ├── api/                    # FastAPI 核心接口与工作区路由
+│   ├── core/                   # 状态机 (ResearchState) / LLM 工厂 / Memory Store (长短期记忆)
+│   ├── agents/                 # 多智能体节点 (Supervisor/Planner/Actor/Reviewer/Writer/Memory)
+│   └── rag/                    # Kimi 异步解析器与 OmniRetriever 混合检索引擎
+├── data/                       # 📂 多工作区物理隔离库 (自动生成)
+│   ├── workspace_1/            # 独立研究沙盒 1
+│   │   ├── raw_docs/           # PDF 原文库
+│   │   ├── vector_db/          # FAISS / BM25 独立索引
+│   │   └── memory/             # JSON画像与避坑经验FAISS库
+│   └── workspaces.json         # 全局域注册表 (由 Sniffer 自动更新)
+├── protocols/                  # Agent 协议层与 MCP 客户端
+├── evaluate_ragas.py           # 📊 Ragas 量化评测引擎
+├── main.py                     # API 后端点火开关
 └── ui.py                       # Streamlit 沉浸式驾驶舱
 ```
 ## 🚀 快速启动 (Quick Start)
