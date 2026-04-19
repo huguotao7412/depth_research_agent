@@ -1,5 +1,6 @@
 # app/agents/workers/researcher.py
 import os
+import asyncio
 from langchain_core.messages import AIMessage
 from langchain_core.tools import tool
 from langchain_core.tools import StructuredTool
@@ -11,8 +12,9 @@ from protocols.mcp.client import get_mcp_tools_and_client
 from app.core.llm_factory import get_llm
 from app.rag.retrievers import get_retriever
 
+
 async def researcher_node(state: ResearchState) -> dict:
-    print("\n⏳ [Researcher] 开始工作 (已激活 本地RAG + MCP联邦检索 模式)...")
+    print("\n⏳ [Actor Cluster] 接收到分解任务，正在唤醒多 Actor 并行计算引擎...")
 
     llm = get_llm(model_type="main", temperature=0.0)
 
@@ -23,9 +25,10 @@ async def researcher_node(state: ResearchState) -> dict:
     db_path = state.get("vector_db_path", "data/vector_db/faiss_index")
 
     # ==========================================
-    # 🛠️ 注册工具 1：本地 RAG 检索工具 (✅ 新增提取来源 metadata)
+    # 🛠️ 注册工具 1：本地 RAG 检索工具
     # ==========================================
     local_retriever = get_retriever(raw_docs_path=raw_path, vector_db_path=db_path)
+
     @tool
     async def search_local_papers(query: str) -> str:
         """
@@ -57,7 +60,6 @@ async def researcher_node(state: ResearchState) -> dict:
         for t in raw_mcp_tools:
             # 使用闭包隔离每个工具的作用域
             def make_safe_wrappers(orig_tool):
-
                 # 内部通用解析逻辑：提取文本和 URL 来源
                 def parse_mcp_result(res):
                     if isinstance(res, list):
@@ -66,7 +68,6 @@ async def researcher_node(state: ResearchState) -> dict:
                             if isinstance(x, dict):
                                 content = x.get("content", x.get("text", str(x)))
                                 url = x.get("url", "")
-                                # 如果有URL来源，则拼接到返回内容中
                                 if url:
                                     parsed_items.append(f"来源：[参考网页]({url})\n{content}")
                                 else:
@@ -78,15 +79,13 @@ async def researcher_node(state: ResearchState) -> dict:
 
                 def sync_wrapper(**kwargs):
                     try:
-                        res = orig_tool.invoke(kwargs)
-                        return parse_mcp_result(res)
+                        return parse_mcp_result(orig_tool.invoke(kwargs))
                     except Exception as e:
                         return f"工具调用异常: {str(e)}"
 
                 async def async_wrapper(**kwargs):
                     try:
-                        res = await orig_tool.ainvoke(kwargs)
-                        return parse_mcp_result(res)
+                        return parse_mcp_result(await orig_tool.ainvoke(kwargs))
                     except Exception as e:
                         return f"工具调用异常: {str(e)}"
 
@@ -111,49 +110,72 @@ async def researcher_node(state: ResearchState) -> dict:
     tools = [search_local_papers] + mcp_tools
 
     # ==========================================
-    # 🧠 构建具备工具调用能力的子智能体 (✅ 强化引用标注提示词)
+    # 🧠 构建具备工具调用能力的子智能体 (Actor)
     # ==========================================
     system_prompt = (
-        "你是一个严谨的学术研究员 (Researcher)。"
-        "你的任务是根据主管的指令，全面收集学术数据和事实证据。\n\n"
+        "你是一个极其专注的学术执行体 (Actor)。"
+        "你的任务是只针对当前分配给你的【特定子任务】，调用工具全面收集证据。\n\n"
         "⚠️ 【强制执行策略与引用规范 - 必须严格遵守】\n"
         "1. 你必须首先使用 `search_local_papers` 工具查询本地文献库。\n"
         "2. 如果信息不足，必须自主调用 Tavily 搜索工具等进行补充。\n"
         "3. 【至关重要】：在综合整理获取到的证据时，你必须把每一条核心信息所对应的【来源】清晰地标注在该条信息的末尾。\n"
         "   - 对于本地文献：请标注 `(来源: xxx.pdf)`\n"
         "   - 对于网络搜索：请**必须直接使用** Markdown 超链接语法，格式为 `[参考网页](完整的URL)`，绝不能在总结中暴露纯文本长链接。\n"
-        "4. 在最终输出的摘要中，必须客观陈述事实，不要编造任何未检索到的数据和来源链接。"
+        "4. 在最终输出的摘要中，必须客观陈述事实，不要编造任何未检索到的数据和来源链接。\n"
         "5. 🛑 【防死循环指令】：最多连续调用工具不超过 5 次。一旦收集到足够支撑任务的核心信息，必须立刻停止检索，直接输出最终的文字总结报告，绝不能无休止地反复调用工具！"
     )
 
-    research_agent = create_react_agent(llm, tools)
+    # ==========================================
+    # ⚡ 核心改造：并行执行逻辑 (Concurrency Optimization)
+    # ==========================================
+    # 从状态机中获取 Planner 拆解好的子任务列表
+    tasks = state.get("research_plan", [])
+    if not tasks:
+        # 兜底逻辑：如果 Planner 没有给出明确的分解计划，则按原始大任务执行
+        tasks = [task_desc]
 
-    print("🧠 [Researcher] 正在自主规划检索策略并调用工具 (这可能包含全网搜索，请耐心等待)...")
-    try:
-        agent_result = await research_agent.ainvoke({
-            "messages": [
-                ("system", system_prompt),
-                ("user", task_desc)
-            ]
-        },
-            config={"recursion_limit": 30}
-        )
+    # 定义单个 Actor 的运行生命周期
+    async def run_single_actor(single_task_desc: str, index: int):
+        print(f"   🚀 [Actor-{index}] 认领并启动子任务: {single_task_desc[:30]}...")
 
-        final_content = agent_result["messages"][-1].content
-        print("✅ [Researcher] 证据收集完毕！")
+        # 每次都单独实例化 Agent，确保各自的状态和工具调用历史完全隔离
+        actor_agent = create_react_agent(llm, tools)
 
-    except Exception as e:
-        print(f"\n❌ [Researcher] 执行期间发生严重错误或超时: {str(e)}")
-        final_content = f"执行过程中发生错误: {str(e)}。无法提供完整的检索数据。"
+        try:
+            agent_result = await actor_agent.ainvoke({
+                "messages": [
+                    ("system", system_prompt),
+                    ("user", f"请完成以下数据收集任务：\n{single_task_desc}")
+                ]
+            }, config={"recursion_limit": 15})
 
-    # ✅ 这里增加一个通用的 source 字段，并让 Writer 注意 final_content 里自带的来源标注
-    new_data = {
-        "task": task_desc,
-        "extracted_info": final_content,
-        "source": "详见上方内容中提取的【来源文献/网页】标注"
-    }
+            final_content = agent_result["messages"][-1].content
+            print(f"   ✅ [Actor-{index}] 任务圆满完成！")
+
+            return {
+                "task": single_task_desc,
+                "extracted_info": final_content,
+                "source": "详见上方内容中提取的【来源文献/网页】标注"
+            }
+        except Exception as e:
+            print(f"   ❌ [Actor-{index}] 执行期间发生异常或超时: {str(e)}")
+            return {
+                "task": single_task_desc,
+                "extracted_info": f"执行失败: {str(e)}。无法提供完整的检索数据。",
+                "source": "无"
+            }
+
+    # 使用 asyncio.gather 拉起多个独立任务并发请求
+    print(f"🧠 [Actor Cluster] 正在同时拉起 {len(tasks)} 个 Actor 智能体并行工作...")
+
+    collected_results = await asyncio.gather(
+        *(run_single_actor(task, i + 1) for i, task in enumerate(tasks))
+    )
+
+    print("✅ [Actor Cluster] 所有并行任务证据收集完毕！")
 
     return {
-        "messages": [AIMessage(content=f"【资料收集完毕】\n{final_content}", name="Researcher")],
-        "collected_data": [new_data]
+        "messages": [AIMessage(content=f"【Actor Cluster 汇报】\n成功并发执行 {len(tasks)} 个检索子任务，资料收集完毕。",
+                               name="Researcher")],
+        "collected_data": collected_results
     }

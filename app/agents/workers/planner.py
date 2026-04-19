@@ -1,33 +1,29 @@
-# app/agents/workers/planner.py
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from pydantic import BaseModel, Field
 from langchain_core.messages import AIMessage
 from app.core.state import ResearchState
 from app.core.llm_factory import get_llm
 
-
 class ResearchPlan(BaseModel):
-    steps: list[str] = Field(description="拆解后的具体研究步骤或大纲列表")
-    reasoning: str = Field(description="为什么这样拆解的思考过程")
-
+    steps: list[str] = Field(description="拆解后的具体子任务列表，每个任务必须独立且包含明确的检索意图")
+    reasoning: str = Field(description="任务分解的思考过程")
 
 def planner_node(state: ResearchState) -> dict:
     llm = get_llm(model_type="main", temperature=0.2)
     instruction = state.get("current_instruction")
-    # 如果 instruction 是对象，防止它为 None 时报错
-    task_desc = instruction.task_description if instruction and hasattr(instruction,
-                                                                        'task_description') else "制定详细的文献调研与写作大纲"
+    task_desc = instruction.task_description if instruction and hasattr(instruction, 'task_description') else "制定详细的文献调研任务分解计划"
 
     prompt = ChatPromptTemplate.from_messages([
-        ("system", "你是一个严谨的学术规划师 (Planner)。"
-                   "你的任务是根据主管的指令和用户原始需求，拆解出具体的研究子任务。\n"
+        ("system", "你是一个顶尖的学术规划与分解大脑 (Planner)。\n"
+                   "你的核心职责是进行【任务分解 (Task Decomposition)】。\n"
+                   "你需要根据主管的指令，将复杂的调研需求拆解为多个独立、清晰的子任务。这些子任务随后将分配给多个 Actor 智能体进行【底层并行执行 (Run in Parallel)】。\n\n"
                    "【拆解原则】\n"
-                   "1. 动态深度：根据用户问题的复杂程度，动态决定子任务的数量（通常 2-5 个），用户问的精准时，子任务数量少，问的笼统时，子任务数量多，不要拘泥于固定的数量。\n"
-                   "2. 动态风格适应（🌟关键）：如果用户的任务是『文献综述』、『国内外研究现状』，请【绝对不要】使用“1.研究背景 2.研究意义 3.预期成果”这种空洞的八股文框架！你应该按照『技术发展的不同阶段』、『不同的技术流派』来拆解大纲。\n"
-                   "3. 结构严谨：遵循 MECE 原则，确保子任务之间相互独立且完全穷尽。\n"
+                   "1. 独立解耦：子任务之间不应有严格的先后依赖，确保它们可以完全同时并发检索。\n"
+                   "2. 动态深度：根据用户问题的复杂程度，动态决定子任务的数量（通常 2-5 个），用户问的精准时，子任务数量少，问的笼统时，子任务数量多，不要拘泥于固定的数量。\n"
+                   "3. 动作导向：每个子任务描述不应只是一个标题（如“研究背景”），而必须是一个具体的检索指令（如“检索并提取近三年关于毫米波雷达生命体征监测的信噪比优化算法数据”）。\n"
                    "必须严格输出 JSON 格式的结构化数据。"),
         MessagesPlaceholder(variable_name="messages"),
-        ("user", "主管的具体指令：{instruction}\n请输出详细的研究计划。")
+        ("user", "主管的具体指令：{instruction}\n请输出详细的任务分解计划。")
     ])
 
     chain = prompt | llm.with_structured_output(
@@ -35,30 +31,25 @@ def planner_node(state: ResearchState) -> dict:
         method="function_calling"
     )
 
-    # 增加异常捕捉，防止 LLM API 抽风导致静默挂起
     try:
         result = chain.invoke({
             "messages": state["messages"],
             "instruction": task_desc
         })
 
-        # 🚨 核心修复：增加空值校验
         if result is None or not hasattr(result, 'steps'):
-            raise ValueError("大模型未能成功生成合规的 JSON 结构大纲。")
+            raise ValueError("大模型未能成功生成合规的 JSON 结构。")
 
-        plan_text = "\n".join([f"{i + 1}. {step}" for i, step in enumerate(result.steps)])
+        plan_text = "\n".join([f"任务 {i + 1}: {step}" for i, step in enumerate(result.steps)])
         response_msg = AIMessage(
-            content=f"【Planner 汇报】规划完成。\n思考过程：{result.reasoning}\n\n研究计划如下：\n{plan_text}",
+            content=f"【Planner 汇报】任务分解完成。\n思考过程：{result.reasoning}\n\n已下发并发子任务：\n{plan_text}",
             name="Planner"
         )
         return {
             "messages": [response_msg],
-            "research_plan": result.steps
+            "research_plan": result.steps  # 这里的 steps 将成为后续 Actor 的入参
         }
     except Exception as e:
         print(f"Planner 节点执行失败: {e}")
-        # 返回一个降级信息让流程继续或让主管知道出错
-        error_msg = AIMessage(content=f"【Planner 报错】无法生成计划，错误信息: {str(e)}。建议重试。", name="Planner")
-        return {
-            "messages": [error_msg],
-        }
+        error_msg = AIMessage(content=f"【Planner 报错】无法分解任务，错误信息: {str(e)}。建议重试。", name="Planner")
+        return {"messages": [error_msg]}

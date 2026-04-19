@@ -19,8 +19,8 @@ def create_supervisor_node(llm: ChatOpenAI):
         【动态工作流 (Dynamic Workflow) - 团队职责】:
         1. ⚡ 快系统 (DailyQA): 专职处理基础概念解释、名词解释、代码语法问答等简单指令（如“什么是向量数据库”、“解释一下残差网络”）。【特点：不检索文献，极速响应】。
         2. 🐢 慢系统 (深度研究):
-           - Planner: 拆解复杂问题，制定大纲。
-           - Researcher: 负责检索本地或全网资料、提取核心证据。
+           - Planner: 负责【任务分解 (Task Decomposition)】，将复杂大目标拆解为独立子任务。
+           - Researcher (Actor Cluster): 负责【并行加速】，接收子任务后，同时实例化多个 Actor 智能体并行运行各自的 RAG 和网页检索。
            - Writer: 基于收集到的数据撰写、扩充学术报告。
            - Reviewer: 审查初稿的逻辑严密性与引用规范。
 
