@@ -25,7 +25,8 @@ def create_app() -> FastAPI:
     app = FastAPI(
         title="DepthResearch-Agent API",
         description="可插拔式通用深度研究智能体引擎 API 服务",
-        version="1.0.0"
+        version="1.0.0",
+        lifespan=lifespan
     )
 
     # 2. 配置跨域 (CORS) - 允许前端页面直接调用
